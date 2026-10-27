@@ -1,0 +1,1658 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>한 잔의 흔적</title>
+<style>
+/* Layout: 둥근 창 안에 두 개의 부드러운 면 — 왼쪽은 표본 카드(정사각 WebGL 캔버스 + 문장), 오른쪽은 단계별로 열리는 조작 패널. 모바일은 표본이 먼저. */
+:root{
+  --sky:#B8C7D2;          /* 창 바깥의 푸른 회색 */
+  --window:#E9EFF3;       /* 앱 창 */
+  --surface:#DFE7ED;      /* 패널 면 */
+  --card:#F3F6F9;         /* 떠 있는 카드 */
+  --card-2:#E9EFF4;       /* 카드 아래쪽 그라데이션 */
+  --plate:#EEEBE5;        /* 작품 바탕 (캔버스와 같은 색) */
+  --ink:#151A2E;          /* 남색 잉크 · 강한 선택 */
+  --text:#2B3242;
+  --muted:#6F7A88;
+  --faint:#A3AEBA;
+  --line:#D2DCE4;
+  --badge:#D4DEE6;
+  --hi:rgba(255,255,255,.9);
+  --shadow:0 1px 1px rgba(255,255,255,.8) inset, 0 10px 26px -10px rgba(70,95,120,.28), 0 2px 6px -2px rgba(70,95,120,.12);
+  --shadow-sm:0 1px 0 rgba(255,255,255,.9) inset, 0 4px 12px -4px rgba(70,95,120,.25);
+  --sans:"Pretendard","Inter","Apple SD Gothic Neo","Noto Sans KR","Malgun Gothic",system-ui,sans-serif;
+  --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+  color-scheme:light;
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html{background:var(--plate)}
+html,body{margin:0;height:100%;overflow:hidden}
+body{background:var(--plate);color:var(--text);font:14px/1.5 var(--sans);-webkit-font-smoothing:antialiased;word-break:keep-all;overflow-wrap:break-word}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+
+/* 앱 창 */
+/* 작품이 창 전체를 채우고, 조작 패널과 문장은 그 위에 겹친다 */
+.app{position:relative;width:100vw;height:100vh;height:100dvh;overflow:hidden}
+
+/* 표본 면 */
+.stage{position:absolute;inset:0;pointer-events:none}
+.frame{position:fixed;inset:0;width:100vw;height:100vh;height:100dvh;background:var(--plate);pointer-events:auto}
+#gl{display:block;width:100%;height:100%}
+.hud{position:fixed;left:max(20px,env(safe-area-inset-left));top:max(20px,env(safe-area-inset-top));display:flex;gap:6px;pointer-events:none;z-index:2}
+.tag{padding:6px 11px;border-radius:999px;background:rgba(255,255,255,.62);box-shadow:var(--shadow-sm);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);font:500 11.5px/1 var(--sans);color:var(--text);letter-spacing:.01em}
+.clock{padding:6px 11px;border-radius:999px;background:rgba(255,255,255,.62);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);font:500 11.5px/1 var(--sans);color:var(--muted);font-variant-numeric:tabular-nums}
+.fallback{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:12%;text-align:center;color:var(--muted);font-size:13.5px;line-height:1.6}
+
+.caption{position:fixed;left:max(24px,env(safe-area-inset-left));bottom:max(24px,env(safe-area-inset-bottom));width:min(560px, calc(100vw - 440px));pointer-events:none;z-index:2}
+.sentence{margin:0;font:500 clamp(17px,1.9vw,21px)/1.45 var(--sans);letter-spacing:-.015em;color:var(--ink);text-wrap:balance}
+
+/* 조작 패널 */
+.panel{position:fixed;top:16px;right:16px;bottom:16px;width:360px;z-index:3;overflow-y:auto;overscroll-behavior:contain;display:flex;flex-direction:column;gap:18px;padding:24px 18px 18px;background:rgba(226,234,240,.72);backdrop-filter:blur(22px) saturate(1.15);-webkit-backdrop-filter:blur(22px) saturate(1.15);border-radius:28px;border:1px solid rgba(255,255,255,.7);box-shadow:0 30px 60px -30px rgba(60,85,110,.5);transition:transform .35s ease, opacity .35s ease}
+.panel header{padding-right:96px}
+body.panel-hidden .panel{transform:translateX(calc(100% + 32px));opacity:0;pointer-events:none}
+.panel-toggle{position:fixed;top:28px;right:30px;z-index:4;padding:7px 12px;font-size:12px;border-radius:12px}
+body.panel-hidden .panel-toggle{top:20px;right:20px}
+.panel h1{margin:0;font:600 22px/1.2 var(--sans);letter-spacing:-.02em;color:var(--ink)}
+.intro{margin:6px 0 0;color:var(--muted);font-size:12.5px;line-height:1.55}
+
+/* 단계 표시: 분절된 알약 */
+.steps{list-style:none;margin:0;padding:4px;display:flex;gap:2px;background:rgba(255,255,255,.35);border-radius:16px;box-shadow:inset 0 1px 2px rgba(70,95,120,.12)}
+.steps li{flex:1;text-align:center;padding:7px 2px;border-radius:12px;font-size:12px;color:var(--faint);white-space:nowrap}
+.steps li.past{color:var(--muted)}
+.steps li.on{color:var(--ink);font-weight:600;background:linear-gradient(180deg,#fff,var(--card));box-shadow:var(--shadow-sm)}
+.summary{margin:0;font-size:12px;color:var(--muted);line-height:1.6;padding:0 4px}
+
+.section{display:flex;flex-direction:column;gap:12px}
+/* 각 입력 묶음: 떠 있는 카드 */
+.field{display:flex;flex-direction:column;gap:10px;min-width:0;padding:16px;background:linear-gradient(180deg,var(--card),var(--card-2));border:1px solid var(--hi);border-radius:20px;box-shadow:var(--shadow)}
+.field-head{display:flex;align-items:baseline;gap:8px;font-size:13.5px;font-weight:600;margin:0;color:var(--ink)}
+.field-head .hint{margin-left:auto;font:400 11px var(--sans);color:var(--faint);text-align:right}
+.maps{margin:0;font-size:11.5px;line-height:1.55;color:var(--muted)}
+fieldset.field{margin:0}
+fieldset{border:0;margin:0;min-width:0}
+legend{padding:0;margin:0 0 10px;width:100%;float:left}
+legend + *{clear:both}
+
+.mood-prompt{margin:0;font-size:12px;color:var(--muted)}
+.mdot{width:10px;height:10px;border-radius:50%;margin-right:7px;flex:none;box-shadow:0 0 0 2px rgba(255,255,255,.7)}
+.mood-msg{margin:0;font-size:11.5px;color:var(--ink);padding:6px 10px;border-radius:10px;background:var(--badge)}
+.mood-msg:empty{display:none}
+.mood-sel{margin:0;font-size:12.5px;color:var(--muted)}
+.mood-sel b{font-weight:600;color:var(--ink)}
+
+/* 단계형 · 연속 막대 슬라이더 */
+.subfield{display:flex;flex-direction:column;gap:7px}
+.subfield + .subfield{margin-top:8px}
+.dial-head{display:flex;align-items:baseline;justify-content:space-between;gap:8px}
+.sub-head{margin:0;font-size:12px;color:var(--muted)}
+.dial-out{font:600 13px var(--sans);color:var(--ink);min-width:0;padding:2px 9px;border-radius:8px;background:var(--badge)}
+input[type=range]{-webkit-appearance:none;appearance:none;width:100%;height:24px;margin:0;background:transparent;cursor:pointer;flex:1;min-width:0}
+input[type=range]:focus{outline:none}
+input[type=range]::-webkit-slider-runnable-track{height:8px;border-radius:999px;background:linear-gradient(180deg,#CBD6DF,#DCE5EC);box-shadow:inset 0 1px 2px rgba(60,85,110,.25)}
+input[type=range]::-moz-range-track{height:8px;border-radius:999px;background:linear-gradient(180deg,#CBD6DF,#DCE5EC);box-shadow:inset 0 1px 2px rgba(60,85,110,.25)}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:22px;height:22px;margin-top:-7px;border-radius:50%;background:linear-gradient(180deg,#fff,#EEF2F6);border:1px solid #fff;box-shadow:0 3px 8px -1px rgba(60,85,110,.35),0 0 0 1px rgba(60,85,110,.08)}
+input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;background:linear-gradient(180deg,#fff,#EEF2F6);border:1px solid #fff;box-shadow:0 3px 8px -1px rgba(60,85,110,.35)}
+input[type=range]:focus-visible::-webkit-slider-thumb{box-shadow:0 0 0 3px var(--ink)}
+input[type=range]:focus-visible::-moz-range-thumb{box-shadow:0 0 0 3px var(--ink)}
+.dial-ticks{display:flex;justify-content:space-between;margin-top:-2px}
+.dial-ticks span{font-size:11.5px;color:var(--faint);cursor:pointer;padding:2px 0;user-select:none}
+.dial-ticks span.on{color:var(--ink);font-weight:600}
+.range-row{display:flex;align-items:center;gap:12px}
+output{font:500 12px var(--sans);color:var(--ink);min-width:3.4em;text-align:right}
+.ends{display:flex;justify-content:space-between;font-size:11px;color:var(--faint);margin-top:-4px}
+
+/* 선택 칩: 선택되면 하얗게 떠오른다 */
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{position:relative;display:inline-flex}
+.chip input{position:absolute;inset:0;width:100%;height:100%;margin:0;opacity:0;cursor:pointer}
+.chip span{display:inline-flex;align-items:center;padding:7px 12px;border:1px solid transparent;border-radius:12px;font-size:12.5px;line-height:1.2;color:var(--muted);background:rgba(255,255,255,.28);transition:background-color .2s,color .2s,box-shadow .2s}
+.chip:hover span{color:var(--text);background:rgba(255,255,255,.55)}
+.chip input:checked + span{background:linear-gradient(180deg,#fff,var(--card));border-color:var(--hi);color:var(--ink);font-weight:600;box-shadow:var(--shadow-sm)}
+.chip input:focus-visible + span{outline:2px solid var(--ink);outline-offset:2px}
+
+/* 시계 카드 */
+.timer{font:500 40px/1 var(--sans);font-variant-numeric:tabular-nums;letter-spacing:-.03em;color:var(--ink);padding:18px 18px 16px;background:linear-gradient(180deg,var(--card),var(--card-2));border:1px solid var(--hi);border-radius:20px;box-shadow:var(--shadow)}
+.timer small{display:block;margin-top:8px;font:400 12px/1.4 var(--sans);color:var(--muted);letter-spacing:0}
+
+.progress{display:flex;flex-direction:column;gap:9px;padding:14px 16px;background:linear-gradient(180deg,var(--card),var(--card-2));border:1px solid var(--hi);border-radius:20px;box-shadow:var(--shadow)}
+.bar{height:8px;border-radius:999px;background:linear-gradient(180deg,#CBD6DF,#DCE5EC);box-shadow:inset 0 1px 2px rgba(60,85,110,.25);position:relative;overflow:hidden}
+.bar i{position:absolute;left:0;top:0;bottom:0;width:0;border-radius:999px;background:var(--ink)}
+.state-line{display:flex;justify-content:space-between;align-items:center;font-size:12.5px;color:var(--ink)}
+.state-line b{font-weight:600}
+.state-line span{font:600 12px var(--sans);padding:2px 8px;border-radius:8px;background:var(--badge);font-variant-numeric:tabular-nums}
+
+.record{display:grid;grid-template-columns:auto minmax(0,1fr);gap:6px 14px;margin:0;font-size:12.5px;padding:14px 16px;border-radius:20px;background:rgba(255,255,255,.35)}
+.record dt{color:var(--muted);font-size:11.5px}
+.record dd{margin:0;color:var(--ink)}
+
+/* 버튼 */
+button{font:inherit;font-size:12.5px;padding:9px 14px;border:1px solid var(--hi);border-radius:14px;background:linear-gradient(180deg,#fff,var(--card));color:var(--ink);cursor:pointer;box-shadow:var(--shadow-sm);transition:transform .15s,box-shadow .15s}
+button:hover{box-shadow:0 1px 0 rgba(255,255,255,.9) inset,0 8px 18px -8px rgba(70,95,120,.4)}
+button:active{transform:translateY(1px)}
+button:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
+button:disabled{opacity:.45;cursor:default;box-shadow:none}
+button.primary{background:var(--ink);border-color:var(--ink);color:#F3F6F9;padding:13px 18px;font-weight:600;border-radius:16px;box-shadow:0 10px 22px -10px rgba(21,26,46,.7)}
+.row{display:flex;flex-wrap:wrap;gap:6px}
+
+/* 지난 실험 */
+.archive{display:flex;flex-direction:column;gap:9px;padding:16px;border-radius:20px;background:rgba(255,255,255,.3)}
+.archive .hint{padding:1px 8px;border-radius:8px;background:var(--badge);color:var(--ink);font-weight:600}
+.archive .hint:empty{display:none}
+.archive-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:4px;max-height:300px;overflow-y:auto}
+.archive-list li{display:flex;align-items:center;gap:6px;min-width:0}
+.arch-item{flex:1;min-width:0;display:flex;align-items:center;gap:10px;padding:6px;border:1px solid transparent;border-radius:14px;text-align:left;background:transparent;box-shadow:none}
+.arch-item:hover{background:rgba(255,255,255,.5);box-shadow:none}
+.arch-item[aria-current="true"]{background:linear-gradient(180deg,#fff,var(--card));border-color:var(--hi);box-shadow:var(--shadow-sm)}
+.arch-item img,.arch-item .ph{width:46px;height:46px;flex:none;background:var(--plate);display:block;border-radius:10px}
+.arch-item span{display:flex;flex-direction:column;gap:2px;min-width:0}
+.arch-item b{font:600 12px var(--sans);color:var(--ink)}
+.arch-item time{font-size:11px;color:var(--muted)}
+.arch-item em{font-style:normal;font-size:12px;line-height:1.4;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text)}
+.arch-del{padding:6px 9px;font-size:11px;color:var(--muted);background:transparent;box-shadow:none;border-color:transparent}
+.arch-del:hover{background:rgba(255,255,255,.6);box-shadow:none}
+.arch-del.confirm{color:#F3F6F9;background:var(--ink);border-color:var(--ink)}
+.viewing{margin:0;font-size:12px;line-height:1.5;padding:10px 12px;border-radius:14px;background:var(--badge);color:var(--ink)}
+.actions{display:flex;flex-wrap:wrap;gap:6px;margin-top:auto;padding-top:4px}
+
+@media (max-width:880px){
+  /* 모바일: 아래에서 올라오는 시트. 문장은 위쪽에 */
+  .panel{top:auto;left:8px;right:8px;bottom:max(8px,env(safe-area-inset-bottom));width:auto;max-height:52vh;max-height:52dvh;padding:20px 14px 16px;border-radius:24px}
+  body.panel-hidden .panel{transform:translateY(calc(100% + 24px))}
+  .panel header{padding-right:0}
+  .panel-toggle{top:auto;right:16px;bottom:calc(52vh + 18px);bottom:calc(52dvh + 18px)}
+  body.panel-hidden .panel-toggle{top:auto;right:16px;bottom:max(16px,env(safe-area-inset-bottom))}
+  .hud{left:14px;top:max(14px,env(safe-area-inset-top))}
+  .caption{left:16px;right:16px;bottom:auto;top:calc(max(14px,env(safe-area-inset-top)) + 38px);width:auto}
+  .sentence{font-size:15px}
+}
+@media (prefers-reduced-motion:reduce){
+  .chip span,button,.panel{transition:none}
+}
+</style>
+</head>
+<body>
+<main class="app">
+  <section class="stage" aria-label="표본">
+    <div class="frame" id="frame">
+      <canvas id="gl" role="img" aria-label=""></canvas>
+      <div class="hud" aria-hidden="true"><span class="tag" id="tagText">유동 상태</span><span class="clock" id="clock">00:00</span></div>
+      <p class="fallback" id="fallback" hidden></p>
+    </div>
+    <div class="caption">
+      <p class="sentence" id="sentence" aria-live="polite"></p>
+    </div>
+  </section>
+
+  <button type="button" class="panel-toggle" id="btnPanel" aria-controls="panel" aria-expanded="true">패널 숨기기</button>
+  <aside class="panel" id="panel" aria-label="한 잔의 기록">
+    <header>
+      <h1>한 잔의 흔적</h1>
+      <p class="intro">커피를 마시는 동안의 감각은 살아 있는 유기체로 움직이고, 다 마신 뒤에는 커피링으로 가라앉습니다. 같은 기록은 언제나 같은 흔적을 남깁니다.</p>
+    </header>
+
+    <ol class="steps" id="steps">
+      <li data-step="pre">마시기 전</li>
+      <li data-step="drinking">마시는 중</li>
+      <li data-step="after">잔향</li>
+      <li data-step="settle">침전</li>
+    </ol>
+    <p class="summary" id="summary" hidden></p>
+
+    <!-- 1. 마시기 전 -->
+    <div class="section" id="secPre">
+      <fieldset class="field">
+        <legend class="field-head">공간의 상태<span class="hint">움직일 수 있는 경계 · 외부 압력</span></legend>
+        <div class="subfield">
+          <div class="dial-head"><label class="sub-head" for="openness">개방감</label><output class="dial-out" id="opennessOut" for="openness"></output></div>
+          <input type="range" class="dial" id="openness" min="0" max="2" step="1" value="0">
+          <div class="dial-ticks" id="opennessTicks"><span data-for="openness" data-v="0">막힘</span><span data-for="openness" data-v="1">보통</span><span data-for="openness" data-v="2">트임</span></div>
+        </div>
+        <div class="subfield">
+          <div class="dial-head"><label class="sub-head" for="density">주변 밀도</label><output class="dial-out" id="densityOut" for="density"></output></div>
+          <input type="range" class="dial" id="density" min="0" max="2" step="1" value="0">
+          <div class="dial-ticks" id="densityTicks"><span data-for="density" data-v="0">한적함</span><span data-for="density" data-v="1">보통</span><span data-for="density" data-v="2">붐빔</span></div>
+        </div>
+        <p class="maps" id="spaceMaps"></p>
+      </fieldset>
+
+      <div class="field">
+        <div class="dial-head"><label class="field-head" for="temp">커피의 온도</label><output class="dial-out" id="tempOut" for="temp"></output></div>
+        <input type="range" class="dial" id="temp" min="0" max="3" step="1" value="2">
+        <div class="dial-ticks" id="tempTicks"><span data-v="0">차가움</span><span data-v="3">뜨거움</span></div>
+        <p class="maps" id="tempMaps"></p>
+      </div>
+
+      <button type="button" class="primary" id="btnStart">마시기 시작</button>
+    </div>
+
+    <!-- 2. 마시는 중 -->
+    <div class="section" id="secDrink" hidden>
+      <div class="timer" aria-live="off"><span id="timer">00:00</span><small id="timerNote">실제 경과 시간</small></div>
+
+      <fieldset class="field" id="moodField">
+        <legend class="field-head">지금의 기분<span class="hint">색 · 색의 관계</span></legend>
+        <p class="mood-prompt">최대 2개 선택 가능</p>
+        <div class="chips" id="moodChips"></div>
+        <p class="mood-msg" id="moodMsg" role="status" aria-live="polite"></p>
+        <p class="mood-sel" id="moodSel"></p>
+        <p class="maps" id="moodMaps"></p>
+      </fieldset>
+
+      <div class="field">
+        <div class="dial-head"><label class="field-head" for="speed">마시는 속도</label><output class="dial-out" id="speedOut" for="speed"></output></div>
+        <input type="range" class="dial" id="speed" min="0" max="2" step="1" value="1">
+        <div class="dial-ticks" id="speedTicks"><span data-v="0">천천히</span><span data-v="1">보통</span><span data-v="2">빠르게</span></div>
+        <p class="maps" id="speedMaps"></p>
+      </div>
+
+      <fieldset class="field">
+        <legend class="field-head">바디감<span class="hint">질량 · 관성 · 중심 핵</span></legend>
+        <div class="chips" id="bodyChips"></div>
+        <p class="maps" id="bodyMaps"></p>
+      </fieldset>
+
+      <button type="button" class="primary" id="btnEnd">마시기 종료</button>
+    </div>
+
+    <!-- 3. 잔향 -->
+    <div class="section" id="secAfter" hidden>
+      <fieldset class="field">
+        <legend class="field-head">애프터테이스트<span class="hint">고리의 농도 · 불투명도</span></legend>
+        <div class="chips" id="afterChips"></div>
+        <p class="maps">잔향은 움직임에는 관여하지 않고, 침전된 고리와 내부 얼룩의 진하기만 정합니다. 침전 뒤에도 바꿀 수 있습니다.</p>
+      </fieldset>
+      <button type="button" class="primary" id="btnSettle" disabled>잔을 내려놓고 침전시키기</button>
+    </div>
+
+    <!-- 4. 침전 · 기록 -->
+    <div class="section" id="secSettle" hidden>
+      <p class="viewing" id="viewing" hidden></p>
+      <div class="progress">
+        <div class="state-line"><b id="stateName">증발 중</b><span id="statePct">0%</span></div>
+        <div class="bar" role="progressbar" aria-label="커피링으로 침전되는 정도" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="bar"><i id="barFill"></i></div>
+      </div>
+      <dl class="record" id="record"></dl>
+      <div class="row">
+        <button type="button" id="btnPng" disabled>PNG 저장</button>
+        <button type="button" id="btnJson" disabled>기록 저장 (JSON)</button>
+      </div>
+      <button type="button" class="primary" id="btnNew" hidden>새 실험 시작</button>
+    </div>
+
+    <section class="archive" aria-labelledby="archiveTitle">
+      <p class="field-head"><span id="archiveTitle">지난 실험</span><span class="hint" id="archiveCount"></span></p>
+      <p class="maps" id="archiveNote">침전이 끝난 실험은 이 브라우저에 자동으로 보관됩니다. 기록을 누르면 그 커피링을 다시 볼 수 있습니다.</p>
+      <ul class="archive-list" id="archiveList"></ul>
+      <div class="row" id="archiveTools" hidden><button type="button" id="btnExportAll">전체 기록 저장 (JSON)</button></div>
+    </section>
+
+    <div class="actions">
+      <button type="button" id="btnReset">초기화</button>
+      <button type="button" id="btnPause" aria-pressed="false">애니메이션 일시정지</button>
+    </div>
+  </aside>
+</main>
+
+<script>
+(() => {
+'use strict';
+
+/* ════════ 데이터 ════════ */
+const MAX = 12;
+const T = .5;                                   // metaball 임계값
+const BG = [0xEE/255, 0xEB/255, 0xE5/255];
+
+// 공간의 상태: 개방감(움직일 수 있는 범위) × 주변 밀도(바깥의 압력)
+const OPENNESS = {
+  closed: {ko:'막힘', v:0,  adj:'막혀 있고',       map:'좁은 경계 안에 압축되어 움직이고,'},
+  mid:    {ko:'보통', v:.5, adj:'적당히 트여 있고', map:'적당한 범위 안에서 움직이며,'},
+  open:   {ko:'트임', v:1,  adj:'트여 있고',       map:'넓은 범위로 퍼져 움직이며,'}
+};
+const DENSITY = {
+  quiet: {ko:'한적함', v:0,  adj:'한적한',           map:'하나의 안정된 중심을 지킵니다.'},
+  mid:   {ko:'보통',   v:.5, adj:'사람이 적당히 있는', map:'가끔 바깥의 약한 압력을 받습니다.'},
+  busy:  {ko:'붐빔',   v:1,  adj:'붐비는',           map:'여러 방향의 압력과 부딪힙니다.'}
+};
+const OPEN_ORDER = ['closed','mid','open'], DENS_ORDER = ['quiet','mid','busy'];
+const spaceCache = {open:1, crowd:0, ko:'', adj:'', map:''};
+const SP = () => spaceCache;
+function refreshSpace(){
+  const o = OPENNESS[S.openness], d = DENSITY[S.density];
+  S.space = S.openness + '/' + S.density;
+  spaceCache.open = o.v; spaceCache.crowd = d.v;
+  spaceCache.ko = `개방감 ${o.ko} · 주변 밀도 ${d.ko}`;
+  spaceCache.adj = `${o.adj} ${d.adj}`;
+  spaceCache.map = `${o.map} ${d.map}`;
+}
+const BODIES = {
+  light:  {ko:'가볍다',   adj:'가벼운',     v:0,  map:'작은 핵이 떠다니며 바깥의 힘에 크게 흔들립니다.'},
+  medium: {ko:'중간이다', adj:'중간 바디의', v:.5, map:'핵과 움직임이 균형을 이룹니다.'},
+  heavy:  {ko:'무겁다',   adj:'무거운',     v:1,  map:'큰 중심 핵이 느리게 반응하며 아래로 처집니다.'}
+};
+const BODY_ORDER = ['light','medium','heavy'];
+const AFTER = {
+  none:   {ko:'거의 남지 않음',   past:'거의 남지 않았다', v:.1},
+  faint:  {ko:'희미하게 남음',    past:'희미하게 남았다',  v:.38},
+  clear:  {ko:'분명하게 남음',    past:'분명하게 남았다',  v:.7},
+  strong: {ko:'매우 강하게 남음', past:'매우 강하게 남았다', v:1}
+};
+const AFTER_ORDER = ['none','faint','clear','strong'];
+const MASS_MIN = .7, MASS_MAX = 3.2;
+
+// 감정별 팔레트: 중심핵, 내부색, 중간색, 외곽색, 강조색
+const moodPalettes = {
+  joy:        ["#FF6F61", "#FF9D6C", "#FFD66B", "#8DD6B5", "#70BFE5"],
+  excitement: ["#F2388F", "#FF82B4", "#C88DE8", "#65CBE3", "#F4E66A"],
+  comfort:    ["#DFA7A0", "#E7B6CB", "#D5C7DF", "#BDD5DE", "#C9D8BC"],
+  sadness:    ["#596B8D", "#7184A5", "#8981A1", "#92A7AC", "#B2BBC5"],
+  discomfort: ["#762F55", "#B5455E", "#D0783F", "#8B963D", "#464B68"]
+};
+const MOODS = {
+  joy:        {ko:'즐거움', adj:'즐거운', conn:'즐겁고',   map:'따뜻하고 밝은 산호색과 노랑이 조화롭게 번집니다.'},
+  excitement: {ko:'설렘',   adj:'설레는', conn:'설레고',   map:'분홍·마젠타와 청록이 생동감 있게 대비됩니다.'},
+  comfort:    {ko:'편안함', adj:'편안한', conn:'편안하고', map:'낮은 대비의 파스텔 분홍·라벤더·하늘색이 고요하게 섞입니다.'},
+  sadness:    {ko:'우울함', adj:'우울한', conn:'우울하고', map:'채도가 낮은 회청색·남색·탁한 보라가 가라앉습니다.'},
+  discomfort: {ko:'불쾌함', adj:'불쾌한', conn:'불쾌하고', map:'자주·붉은색·탁한 주황·올리브가 긴장된 채 맞섭니다.'}
+};
+const MOOD_ORDER = ['joy','excitement','comfort','sadness','discomfort'];
+// 감정 관계: 0 = 비슷함(넓게 섞임), 0.5 = 서로 다름, 1 = 대비(각자의 색을 지킴)
+const SIMILAR  = new Set(['excitement|joy', 'comfort|joy', 'comfort|sadness']);
+const CONTRAST = new Set(['joy|sadness', 'discomfort|joy', 'discomfort|excitement', 'comfort|discomfort']);
+function relation(a, b){ if (!a || !b) return 0; const k = [a, b].sort().join('|'); return SIMILAR.has(k) ? 0 : CONTRAST.has(k) ? 1 : .5; }
+function relKo(r){ return r < .25 ? '비슷한 감정' : r > .75 ? '대비되는 감정' : '서로 다른 감정'; }
+const srgbToLin = c => c <= .04045 ? c / 12.92 : Math.pow((c + .055) / 1.055, 2.4);
+const hexToLin = h => [srgbToLin(parseInt(h.slice(1,3),16)/255), srgbToLin(parseInt(h.slice(3,5),16)/255), srgbToLin(parseInt(h.slice(5,7),16)/255)];
+function linChroma(r, g, b){
+  const l = Math.cbrt(.4122214708*r + .5363325363*g + .0514459929*b);
+  const m = Math.cbrt(.2119034982*r + .6806995451*g + .1073969566*b);
+  const s = Math.cbrt(.0883024619*r + .2817188376*g + .6299787005*b);
+  return Math.hypot(1.9779984951*l - 2.4285922050*m + .4505937099*s, .0259040371*l + .7827717662*m - .8086757660*s);
+}
+const MOOD_LIN = {};
+for (const k in moodPalettes) MOOD_LIN[k] = moodPalettes[k].map(hexToLin);
+
+// 커피의 온도: 색소의 퍼짐과 혼합 정도만 조절한다 (팔레트 · 리듬과는 무관)
+const TEMPS = {
+  cold:     {ko:'차가움',   adj:'차가운',   v:0,   map:'차가울수록 색층이 응집되어 또렷하게 나뉩니다.'},
+  lukewarm: {ko:'미지근함', adj:'미지근한', v:1/3, map:'색층이 조금 응집된 채 천천히 섞입니다.'},
+  warm:     {ko:'따뜻함',   adj:'따뜻한',   v:2/3, map:'색층이 부드럽게 퍼지며 섞입니다.'},
+  hot:      {ko:'뜨거움',   adj:'뜨거운',   v:1,   map:'뜨거울수록 색층이 넓게 퍼져 유동적으로 섞입니다.'}
+};
+const TEMP_ORDER = ['cold','lukewarm','warm','hot'];
+const RING_HF = 1.07, RING_EDGE = .34, RING_RATE = .32;    // 침전 속도와 고리 경계 (고정값)
+const DEFAULTS = {moods:['comfort', null], ratio:.5, openness:'open', density:'quiet', temp:'warm', demo:false, speed:'mid', body:'medium'};
+// 마시는 속도: 3단계. 호흡(맥박) 주기를 정한다
+const SPEEDS = {
+  slow: {ko:'천천히', adv:'천천히',       v:0,  map:'약 9초 주기로 느리게 수축하고 팽창합니다.'},
+  mid:  {ko:'보통',   adv:'보통 속도로', v:.5, map:'약 6초 주기로 고르게 호흡합니다.'},
+  fast: {ko:'빠르게', adv:'빠르게',       v:1,  map:'약 5초 주기로 빠르게 맥박칩니다.'}
+};
+const SPEED_ORDER = ['slow','mid','fast'];
+
+/* ════════ 유틸 ════════ */
+const $ = s => document.querySelector(s);
+const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
+const lerp = (a, b, t) => a + (b - a) * t;
+function hashStr(s){ let h = 2166136261 >>> 0; for (const c of s){ h ^= c.codePointAt(0); h = Math.imul(h, 16777619); } return h >>> 0; }
+function mulberry32(a){ return () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+function hi(i){ i = Math.imul(i ^ 0x9E3779B9, 0x85EBCA6B); i ^= i >>> 13; i = Math.imul(i, 0xC2B2AE35); i ^= i >>> 16; return (i >>> 0) / 4294967296 * 2 - 1; }
+function n1(x){ const i = Math.floor(x), f = x - i, u = f * f * (3 - 2 * f); return hi(i) * (1 - u) + hi(i + 1) * u; }   // 부드러운 1D noise
+function _unusedLabToCss(L, a, b){
+  const l_ = L + .3963377774*a + .2158037573*b, m_ = L - .1055613458*a - .0638541728*b, s_ = L - .0894841775*a - 1.291485548*b;
+  const l = l_*l_*l_, m = m_*m_*m_, s = s_*s_*s_;
+  const f = x => { x = clamp(x, 0, 1); return Math.round((x <= .0031308 ? 12.92*x : 1.055*Math.pow(x, 1/2.4) - .055) * 255); };
+  return `rgb(${f(4.0767416621*l - 3.3077115913*m + .2309699292*s)},${f(-1.2684380046*l + 2.6097574011*m - .3413193965*s)},${f(-.0041960863*l - .7034186147*m + 1.707614701*s)})`;
+}
+const pad2 = n => String(n).padStart(2, '0');
+function fmtClock(sec){ sec = Math.floor(sec); const h = Math.floor(sec/3600), m = Math.floor(sec/60) % 60, s = sec % 60; return (h ? h + ':' + pad2(m) : pad2(m)) + ':' + pad2(s); }
+function fmtKo(sec){ sec = Math.round(sec); const h = Math.floor(sec/3600), m = Math.floor(sec/60) % 60, s = sec % 60;
+  if (h) return `${h}시간 ${m}분`; if (m) return s ? `${m}분 ${s}초` : `${m}분`; return `${s}초`; }
+
+/* ════════ 상태 ════════ */
+const S = {
+  phase:'pre',                       // pre → drinking → after → settling → done
+  moods:[...DEFAULTS.moods], ratio:DEFAULTS.ratio, openness:DEFAULTS.openness, density:DEFAULTS.density, space:'', temp:DEFAULTS.temp, demo:DEFAULTS.demo,
+  speed:DEFAULTS.speed, irr:0, body:DEFAULTS.body, after:null,
+  startedAt:0, startedWall:null, durationSec:0,
+  p:0, tS:0, returning:false, record:null
+};
+// 보간되는 현재 값 (선택이 바뀌면 이 값들이 목표로 천천히 따라간다)
+const P = {w0:1, w1:0, on0:1, on1:0, rel:0, temp:TEMPS[DEFAULTS.temp].v, open:1, crowd:0, body:.5, speed:SPEEDS[S.speed].v, irr:0, mA:.55, aft:0};
+const rmq = window.matchMedia ? window.matchMedia('(prefers-reduced-motion: reduce)') : {matches:false};
+let reduced = rmq.matches;
+let paused = false;
+let mt = 0, phase = 0;                // 움직임 시간, 누적 리듬 위상
+let liveN = [1, 1];
+
+/* ════════ 유기체를 이루는 Gaussian 덩어리 ════════ */
+// 감정마다 독립된 Gaussian 그룹 (grp 0 = 첫 번째 기분, 1 = 두 번째 기분)
+// li 0 = 중심핵, 1–3 = 몸체 밀도장, 4 = 강조색 핵, 5 = 외부 안개
+const PER_GROUP = 6;
+const KIND_OF = [1, 0, 0, 0, 1, 2];
+const blobs = [];
+for (let g = 0; g < 2; g++) for (let li = 0; li < PER_GROUP; li++){
+  const i = g * PER_GROUP + li;
+  blobs.push({i, grp:g, li, kind:KIND_OF[li], x:0, y:0, vx:0, vy:0,
+    s:.1, q:0, asp:1, ang:0, bx:0, by:0, bs:.1, bq:1, basp:1, bang:0,
+    phi:0, psi:0, A:0, B:0, h:hashStr('blob' + i), fx:0, fy:0, ring:null});
+}
+let layoutReady = false;
+let breathG = 0;                       // 전체 형태의 호흡 (−0.5 … 0.5)
+const gOff = [0, 0, 0, 0], gScale = [1, 1];
+let pairKey = '', pairAng = 0;
+
+function updatePair(){
+  // 두 감정이 마주 놓이는 방향: 선택한 두 기분과 공간에서 나온 고정 seed
+  pairAng = (hashStr('pair|' + (S.moods[0] || '') + '|' + (S.moods[1] || '') + '|' + S.space) % 6283) / 1000;
+}
+function buildLayout(){
+  // 기본 형태는 공간 선택에서 나온 고정 seed로 만든다 → 같은 입력이면 같은 형태
+  for (let g = 0; g < 2; g++){
+    const r = mulberry32(hashStr('한 잔|' + S.space + '|' + g));
+    const a0 = r() * 6.2832;
+    for (let li = 0; li < PER_GROUP; li++){
+      const b = blobs[g * PER_GROUP + li]; let ang = 0, rad = 0;
+      if (li === 0){ rad = .02 * r(); ang = r()*6.28; b.bs = .13; b.bq = 1.15; b.basp = 1.04; b.bang = r()*3.14; }
+      else if (li <= 3){ ang = a0 + (li-1)*2.094 + (r()-.5)*.8; rad = .08 + r()*.07; b.bs = .17 + r()*.04; b.bq = .9; b.basp = 1.06 + r()*.16; b.bang = r()*3.14; }
+      else if (li === 4){ ang = a0 + 1 + (r()-.5)*.8; rad = .1 + r()*.07; b.bs = .065 + r()*.02; b.bq = .7; b.basp = 1; b.bang = 0; }
+      else { ang = a0 + 3.1 + r(); rad = .06 + r()*.06; b.bs = .36 + r()*.06; b.bq = .45; b.basp = 1.06; b.bang = r()*3.14; }
+      b.bx = Math.cos(ang) * rad; b.by = Math.sin(ang) * rad;
+      b.phi = r() * 6.2832; b.psi = r() * 6.2832;
+      b.A = .012 + r() * .016; b.B = .01 + r() * .016;          // 위치 변화: 반지름의 약 2–6%
+      if (!layoutReady){ const sp = lerp(.92, 1.2, SP().open); b.x = b.bx * sp; b.y = b.by * sp; b.s = b.bs * .6; b.q = 0; b.asp = b.basp; b.ang = b.bang; b.vx = b.vy = 0; }
+    }
+  }
+  layoutReady = true;
+  updatePair();
+}
+
+/* ════════ 감정 색 (linear RGB, 천천히 바뀐다) ════════ */
+const colCur = [new Float32Array(15), new Float32Array(15)];
+function moodWeights(){
+  const [a, b] = S.moods;
+  if (a && b) return [.5, .5];                              // 두 기분은 같은 비중으로 공존
+  return a ? [1, 0] : [0, 1];
+}
+function snapColors(){
+  for (let g = 0; g < 2; g++){
+    const id = S.moods[g] || S.moods[1 - g]; if (!id) continue;
+    const t = MOOD_LIN[id];
+    for (let j = 0; j < 5; j++) for (let ch = 0; ch < 3; ch++) colCur[g][j*3 + ch] = t[j][ch];
+  }
+}
+function updateColors(dt){
+  const k = 1 - Math.exp(-dt * 1.4);                        // 감정이 바뀌어도 색이 갑자기 바뀌지 않는다
+  for (let g = 0; g < 2; g++){
+    const id = S.moods[g]; if (!id) continue;
+    const t = MOOD_LIN[id], c = colCur[g];
+    const hidden = (g === 0 ? P.on0 : P.on1) < .03;         // 보이지 않던 그룹은 새 색으로 바로 시작
+    for (let j = 0; j < 5; j++) for (let ch = 0; ch < 3; ch++){
+      const i = j*3 + ch; c[i] = hidden ? t[j][ch] : c[i] + (t[j][ch] - c[i]) * k;
+    }
+  }
+}
+
+/* ════════ 색층과 커피링 구성 ════════ */
+// 커피링은 유기체 자신의 윤곽에서 생긴다: 마지막 순간의 실루엣이 접촉선이 되고, 색소가 그 가장자리로 밀려나 띠가 된다
+// ring.F[k] = (윤곽 a_k, b_k, 안쪽 경계 a_k, b_k) — 각도의 푸리에 계수라 이음매가 없다. k = 0 칸은 (윤곽 평균, 안쪽 경계 평균, 지연 평균, 띠 변화 평균)
+// ring.G[k-1] = (지연 a_k, b_k, 띠 변화 a_k, b_k), k = 1..4
+const RF_K = 16;
+const ring = {n:0, R:new Float32Array(4), W:new Float32Array(4), rel:new Float32Array(4), Rout:.64, N:null,
+  eps:0, k:2, ph:0, noise:0, nz:[0,0,0], h1:0, p1:0, h2:0, p2:0, cx:0, cy:0, rate:.5, d:0,
+  F:new Float32Array(4 * (RF_K + 1)), G:new Float32Array(16), ox:0, oy:0};
+const hist = new Float32Array(8);
+let histCx = 0, histCy = 0, histT = 0;
+
+function durMin(){ return S.durationSec / 60; }
+function recordKey(){
+  return [S.moods[0] || '-', S.moods[1] || '-', Math.round(S.ratio*20), S.space, S.temp, S.speed,
+          S.body, S.after, Math.round(S.durationSec / 10)].join('|');
+}
+
+// 화면에 보이는 유기체의 밀도 (셰이더와 같은 식, 화면 좌표: 짧은 변 = 1)
+function orgDensity(x, y){
+  let D = 0;
+  for (let i = 0; i < MAX; i++){
+    const o = i * 4, w = uBlob[o+3]; if (w <= 0) continue;
+    const dx = x - uBlob[o], dy = y - uBlob[o+1], s = uBlob[o+2];
+    D += w * Math.exp(-(dx*dx + dy*dy) / (2 * s * s));
+  }
+  return D;
+}
+// 유기체의 실루엣을 각도별 반지름으로 읽는다. 유기체가 없으면 null
+function traceOutline(){
+  const G = 40; let sx = 0, sy = 0, sw = 0;
+  for (let j = 0; j < G; j++) for (let i = 0; i < G; i++){
+    const x = (i + .5) / G - .5, y = (j + .5) / G - .5;
+    const a = clamp((orgDensity(x, y) - .23) / .54, 0, 1);
+    sx += x * a; sy += y * a; sw += a;
+  }
+  if (sw < 8) return null;
+  const cx = sx / sw, cy = sy / sw, N = 64, LEVEL = .36, rad = new Float32Array(N);
+  for (let k = 0; k < N; k++){
+    const t = k / N * 6.2832, c = Math.cos(t), s = Math.sin(t);
+    let r = .1;
+    for (let rr = .6; rr > .02; rr -= .003){ if (orgDensity(cx + c * rr, cy + s * rr) >= LEVEL){ r = rr; break; } }
+    rad[k] = r;
+  }
+  return {cx, cy, rad};
+}
+// 실루엣 → 커피링 형태 (윤곽 · 안쪽 경계 · 지연 · 띠 변화). 시드로 결정되므로 같은 입력은 같은 무늬를 남긴다
+function shapeRing(o, r){
+  const sp = SP(), d = ring.d, aft = AFTER[S.after] ? AFTER[S.after].v : .5;
+  const F = ring.F, Gc = ring.G, N = o.rad.length;
+  F.fill(0); Gc.fill(0);
+  let a0 = 0; for (let k = 0; k < N; k++) a0 += o.rad[k]; a0 /= N;
+  F[0] = a0;
+  for (let k = 1; k <= RF_K; k++){
+    let a = 0, b = 0;
+    if (k <= 8){
+      for (let j = 0; j < N; j++){ const t = j / N * 6.2832; a += o.rad[j] * Math.cos(k * t); b += o.rad[j] * Math.sin(k * t); }
+      const damp = .84 / (1 + .015 * k * k);                     // 실루엣을 조금 둥글게: 물방울처럼 퍼지며 고르게 된다
+      a *= 2 / N * damp; b *= 2 / N * damp;
+    }
+    // 가장자리의 작은 굴곡 (붐빌수록, 덜 트일수록 울퉁불퉁)
+    if (k >= 5){
+      const amp = a0 * (.01 + .011 * sp.crowd + .005 * (1 - sp.open)) * Math.pow(6 / k, 1.05) * (.45 + .55 * r());
+      const ph = r() * 6.2832;
+      a += amp * Math.cos(ph); b += amp * Math.sin(ph);
+    }
+    F[k*4] = a; F[k*4+1] = b;
+  }
+  // 마시는 동안의 이동 기록: 많이 움직인 쪽으로 조금 더 번진다
+  F[4] += a0 * ring.h1 * Math.cos(ring.p1); F[5] += a0 * ring.h1 * Math.sin(ring.p1);
+  F[8] += a0 * ring.h2 * Math.cos(ring.p2); F[9] += a0 * ring.h2 * Math.sin(ring.p2);
+  // 퍼짐: 접촉선은 실루엣보다 조금 바깥에 고정된다
+  for (let k = 0; k <= RF_K; k++){ F[k*4] *= 1.045; F[k*4+1] *= 1.045; }
+  // 화면 안에 들도록
+  let mx = 0, mn = 9;
+  for (let j = 0; j < 72; j++){
+    const t = j / 72 * 6.2832; let v = F[0];
+    for (let k = 1; k <= RF_K; k++) v += F[k*4] * Math.cos(k*t) + F[k*4+1] * Math.sin(k*t);
+    mx = Math.max(mx, v); mn = Math.min(mn, v);
+  }
+  const sc = mx > .44 ? .44 / mx : F[0] < .15 ? .15 / Math.max(F[0], .01) : 1;
+  for (let k = 0; k <= RF_K; k++){ F[k*4] *= sc; F[k*4+1] *= sc; }
+  // 안쪽 경계: 색소가 빠져나간 가운데의 가장자리. 길게 마실수록 띠가 두꺼워진다
+  F[1] = lerp(.6, .5, d) - .04 * aft;
+  for (let k = 2; k <= RF_K; k++){
+    const amp = .036 * Math.pow(3 / k, 1.2) * (.45 + .55 * r()), ph = r() * 6.2832;
+    F[k*4+2] = amp * Math.cos(ph); F[k*4+3] = amp * Math.sin(ph);
+  }
+  // 침전의 지연(각도마다 다른 시점에 비워진다)과 띠의 짙고 옅음
+  F[2] = .16; F[3] = 0;
+  for (let k = 1; k <= 4; k++){
+    const da = .11 / k * (.5 + .5 * r()), dp = r() * 6.2832;
+    const va = (k < 4 ? .55 / k : 0) * (.5 + .5 * r()), vp = r() * 6.2832;
+    Gc[(k-1)*4] = da * Math.cos(dp); Gc[(k-1)*4+1] = da * Math.sin(dp);
+    Gc[(k-1)*4+2] = va * Math.cos(vp); Gc[(k-1)*4+3] = va * Math.sin(vp);
+  }
+  ring.ox = o.cx; ring.oy = o.cy;
+}
+
+function buildRing(){
+  const seed = hashStr(recordKey());
+  const r = mulberry32(seed);
+  const sp = SP();
+  const d = clamp(durMin() / 25, 0, 1);                     // 음용 시간 정규화 (25분 이상 = 1)
+  const n = Math.min(4, 1 + Math.round(3 * d));             // n = 1 + round(3d)
+  const hf = RING_HF;
+  ring.n = n; ring.d = d;
+  const Rout = lerp(.52, .6, sp.open);                          // 공간 → 고리가 맺히는 범위
+  ring.Rout = Rout;
+  let R = Rout;
+  for (let j = 0; j < 4; j++){
+    if (j < n){
+      if (j > 0) R -= Rout * (.13 + .07 * r()) * (n === 2 ? 1.6 : 1);
+      ring.R[j] = R;
+      ring.W[j] = (.052 - .03 * d) * hf * (j === 0 ? 1 : .62);
+      ring.rel[j] = j === 0 ? 1 : (.55 - .1*j) * (.8 + .35 * r());
+    } else { ring.R[j] = 0; ring.W[j] = .01; ring.rel[j] = 0; }
+  }
+  ring.eps = .008 + .018 * sp.crowd + .008 * (1 - sp.open);  // 공간: 붐빌수록 크게 휘어짐
+  ring.k = 2 + Math.floor(r() * 2);
+  ring.ph = r() * 6.2832;
+  ring.noise = .005;                                         // 저주파 변형 (고정)
+  ring.nz = [r()*6.28, r()*6.28, r()*6.28];
+  // 유기체의 이동 기록 → 저차 푸리에 변형
+  let sx = 0, sy = 0, s2x = 0, s2y = 0, tot = 0;
+  for (let k = 0; k < 8; k++){ const a = (k + .5) / 8 * 6.2832 - Math.PI; sx += hist[k]*Math.cos(a); sy += hist[k]*Math.sin(a); s2x += hist[k]*Math.cos(2*a); s2y += hist[k]*Math.sin(2*a); tot += hist[k]; }
+  if (tot > 1e-5){
+    ring.h1 = Math.min(.02, Math.hypot(sx, sy) / tot * .045); ring.p1 = Math.atan2(sy, sx);
+    ring.h2 = Math.min(.014, Math.hypot(s2x, s2y) / tot * .035); ring.p2 = Math.atan2(s2y, s2x);
+  } else { ring.h1 = ring.h2 = 0; }
+  ring.cx = histT > 0 ? clamp(histCx / histT * .4, -.04, .04) : 0;
+  ring.cy = histT > 0 ? clamp(histCy / histT * .4, -.04, .04) : 0;
+  ring.rate = RING_RATE;
+
+  // 커피링 형태: 지금 보이는 유기체의 실루엣에서 시작한다
+  const o = traceOutline() || {cx:0, cy:0, rad:new Float32Array(64).fill(Rout * .5)};
+  shapeRing(o, r);
+
+  // 각 Gaussian은 제자리에서 조금 바깥으로 번지기만 한다 (형태가 갑자기 바뀌지 않도록)
+  const kx = ring.ox / (ORG_K * .5), ky = ring.oy / (ORG_K * .5);
+  for (const b of blobs){
+    const g = b.ring || (b.ring = {});
+    g.stain = false;
+    g.x = kx + (b.x - kx) * 1.07; g.y = ky + (b.y - ky) * 1.07;
+    g.s = b.s * 1.06; g.asp = b.asp; g.q = b.q;
+  }
+  ring.N = [liveN[0], liveN[1]];
+  return seed;
+}
+// 이전 버전에서 저장한 기록처럼 형태 정보가 없을 때: 시드만으로 둥근 윤곽을 만든다
+function fallbackRing(){
+  const r = mulberry32(hashStr(recordKey()));
+  for (let i = 0; i < 12; i++) r();
+  shapeRing({cx:0, cy:0, rad:new Float32Array(64).fill((ring.Rout || .56) * .5)}, r);
+}
+
+/* ════════ 시뮬레이션 ════════ */
+function update(dt){
+  const sp = SP(), bd = BODIES[S.body];
+  const kq = 1 - Math.exp(-dt * 1.2);
+  // 감정 비율과 관계: 슬라이더를 움직이면 천천히 따라간다
+  const wt = moodWeights(), kw = 1 - Math.exp(-dt * 2.2);
+  P.w0 += (wt[0] - P.w0) * kw; P.w1 += (wt[1] - P.w1) * kw;
+  P.on0 += ((S.moods[0] ? 1 : 0) - P.on0) * kw; P.on1 += ((S.moods[1] ? 1 : 0) - P.on1) * kw;
+  P.rel += (relation(S.moods[0], S.moods[1]) - P.rel) * kq;
+  P.temp += (TEMPS[S.temp].v - P.temp) * kq;
+  P.open += (sp.open - P.open) * (1 - Math.exp(-dt * 4)); P.crowd += (sp.crowd - P.crowd) * kq;   // 개방감은 슬라이더를 바로 따라간다 (약 0.5초)
+  P.body += (bd.v - P.body) * kq; P.speed += (SPEEDS[S.speed].v - P.speed) * kq; P.irr = 0;
+  const mATarget = S.phase === 'pre' ? .55 : S.phase === 'drinking' ? 1 : .6;
+  P.mA += (mATarget - P.mA) * kq;
+  if (S.after) P.aft += (AFTER[S.after].v - P.aft) * (1 - Math.exp(-dt * 2));
+
+  // 침전 진행: transitionProgress = 1 − exp(−rate × t)
+  if (S.phase === 'settling'){
+    S.tS += dt;
+    S.p = 1 - Math.exp(-ring.rate * S.tS);
+    if (S.p > .995){ S.p = 1; finishSettle(); }
+  } else if (S.returning){
+    S.p = Math.max(0, S.p - dt * .6);
+    if (S.p === 0){ S.returning = false; ring.N = null; blobs.forEach(b => b.ring = null); }
+  }
+  const p = S.p;
+  const still = 1 - p;
+  mt += dt * (reduced ? .5 : 1) * still;
+  updateColors(dt);
+  if (p >= 1) return;                                      // 완전히 정지
+
+  // 리듬: 누적 위상. 불규칙성은 위상 속도를 부드럽게 흔든다
+  const f = 1/9 + (1/5 - 1/9) * P.speed;                   // 호흡 주기 9초(천천히) … 5초(빠르게)
+  const wobble = 1 + P.irr * .6 * n1(mt * .2 + 3.7);
+  phase += 6.2832 * f * Math.max(.25, wobble) * dt * (reduced ? .5 : 1) * still;
+  const mA = P.mA * still * still * (reduced ? .3 : 1);
+  const spread = lerp(.78, 1.25, P.open);                    // 개방감 → 덩어리들이 자리 잡는 범위
+  const bound = lerp(.3, .64, P.open);                       // 개방감 → 보이지 않는 벽 (막힘은 실루엣 가까이)
+  const sizeO = lerp(.88, 1.08, P.open);                     // 개방감 → 덩어리 크기
+  const ampO = lerp(.65, 1.3, P.open);                       // 개방감 → 출렁이는 폭 (속도 · 리듬은 그대로)
+  const mass = MASS_MIN + P.body * (MASS_MAX - MASS_MIN);   // mass = min + body × (max − min)
+  const pulseExp = 1 + 1.2 * P.speed;
+  breathG = (Math.pow(.5 + .5 * Math.sin(phase), pulseExp) - .45) * mA;
+  const bv = P.body;
+  const kSpring = lerp(8, 6.2, P.crowd) * lerp(1.15, .75, bv);
+  const ampB = lerp(1.8, .5, bv) * ampO;                     // 가벼울수록 크게, 무거울수록 작게 움직인다
+  const yOff = lerp(.05, -.075, bv);                         // 가벼우면 떠오르고, 무거우면 가라앉는다
+  breathG *= lerp(1.6, .6, bv);
+
+  // 군집 중심 (한적한 공간은 하나의 중심으로 돌아온다)
+  let cx = 0, cy = 0, cn = 0;
+  for (const b of blobs){ if (b.kind !== 2){ const w = b.grp === 0 ? P.on0 : P.on1; cx += b.x * w; cy += b.y * w; cn += w; } }
+  cn = Math.max(cn, 1e-3); cx /= cn; cy /= cn;
+
+  // 두 감정 그룹: 조금 다른 위치에서 출발해 천천히 끌어당기고 멀어진다
+  const both = Math.min(P.on0, P.on1);
+  const wsum = Math.max(P.w0 + P.w1, 1e-3);
+  const sep = lerp(.14, .3, P.rel) * (1 + .25 * Math.sin(mt * .09)) * both;   // 비슷하면 가깝고, 대비되면 멀다
+  const ux = Math.cos(pairAng), uy = Math.sin(pairAng);
+  gOff[0] = -ux * sep * P.w1 / wsum; gOff[1] = -uy * sep * P.w1 / wsum;
+  gOff[2] =  ux * sep * P.w0 / wsum; gOff[3] =  uy * sep * P.w0 / wsum;
+  const mxw = Math.max(P.w0, P.w1, 1e-3);
+  gScale[0] = lerp(.78, 1, P.w0 / mxw) * lerp(1, .86, both);
+  gScale[1] = lerp(.78, 1, P.w1 / mxw) * lerp(1, .86, both);
+
+  for (const b of blobs){
+    const i = b.i;
+    // 형태 목표값 (몸체 질량에 따라 중심 핵 크기)
+    let sMul = 1, qMul = 1;
+    if (b.li === 0){ sMul = .7 + .75 * P.body; qMul = .9 + .35 * P.body; }
+    else if (b.kind === 1){ sMul = .8 + .3 * P.body; }
+    const pulse = Math.pow(.5 + .5 * Math.sin(phase + b.phi * .35), pulseExp);   // 호흡
+    const breath = 1 + lerp(.09, .035, bv) * (pulse - .4) * mA;
+    const tS = b.bs * sMul * breath * gScale[b.grp] * sizeO;
+    const tQ = b.bq * qMul * (1 + .05 * (pulse - .4) * mA) * (b.grp === 0 ? P.on0 : P.on1);
+    b.s += (tS - b.s) * (1 - Math.exp(-dt * 3));
+    b.q += (tQ - b.q) * (1 - Math.exp(-dt * 1.5));
+    b.asp += (b.basp - b.asp) * kq;
+    let da = b.bang - b.ang; da = Math.atan2(Math.sin(da), Math.cos(da)); b.ang += da * kq * .5;
+
+    // x_i(t) = x_i0 + A sin(2πft + φ),  y_i(t) = y_i0 + B cos(1.6πft + ψ)
+    let tx = b.bx * spread * lerp(1, 1.1, bv) + b.A * ampB * mA * Math.sin(phase + b.phi);
+    let ty = b.by * spread * lerp(1, .82, bv) + b.B * ampB * mA * Math.cos(.8 * phase + b.psi);
+    ty += yOff + (b.by < 0 ? b.by * .3 * bv : 0);             // 무거운 바디: 아랫부분이 처진다
+    // 가벼운 바디: 덩어리마다 따로 떠다니는 부유
+    tx += .03 * (1 - bv) * mA * Math.sin(mt * .85 + b.phi * 1.3);
+    ty += .036 * (1 - bv) * mA * Math.sin(mt * .66 + b.psi);
+    // 무거운 바디: 전체가 함께 느리게 출렁인다
+    tx += .022 * bv * mA * Math.sin(mt * .27);
+    tx += gOff[b.grp * 2]; ty += gOff[b.grp * 2 + 1];
+    tx += P.irr * .014 * mA * n1(mt * .15 + i * 7.1);
+    ty += P.irr * .014 * mA * n1(mt * .15 + i * 3.3 + 50);
+
+    // 힘
+    let fx = kSpring * (tx - b.x), fy = kSpring * (ty - b.y);
+    fx += -cx * 2.2 * (1 - P.crowd); fy += -(cy - yOff) * 2.2 * (1 - P.crowd);
+    const bm = (b.li === 0 ? 1.4 : 1);
+    fy += -.22 * P.body * bm * still;                                  // 무거운 바디: 아래로 처짐
+    fy += .05 * (1 - P.body) * still;                                  // 가벼운 바디: 부유
+    fx += .07 * (1 - P.body) * mA * n1(mt * .1 + i * 11.3);
+    fy += .07 * (1 - P.body) * mA * n1(mt * .1 + i * 5.9 + 20);
+    // 붐비는 공간: 여러 방향의 약한 외부 압력과 충돌
+    if (P.crowd > .01){
+      for (let s = 0; s < 3; s++){
+        const sa = 1.3 + s * 2.094 + .5 * n1(mt * .03 + s * 9);
+        const I = Math.pow(Math.max(0, n1(mt * .12 + s * 17.3)), 2) * P.crowd * mA;
+        const px = Math.cos(sa) * 1.05, py = Math.sin(sa) * 1.05;
+        const dx = b.x - px, dy = b.y - py, dd = dx*dx + dy*dy, dl = Math.sqrt(dd) + 1e-4;
+        const fz = I * .5 / (dd + .15);
+        fx += dx / dl * fz; fy += dy / dl * fz;
+      }
+    }
+    // 경계: 열린 공간은 넓고, 닫힌 공간은 압축
+    const r = Math.hypot(b.x, b.y);
+    const lim = bound - (b.kind === 2 ? .15 : 0);
+    if (r > lim){ const k = (r - lim) * 24; fx -= b.x / r * k; fy -= b.y / r * k; }
+    b.fx = fx; b.fy = fy;
+  }
+  // 끌어당김 ↔ 분리
+  const str = .018 * mA * lerp(1.8, .6, bv);
+  for (let i = 0; i < blobs.length; i++){
+    const a = blobs[i]; if (a.kind === 2) continue;
+    for (let j = i + 1; j < blobs.length; j++){
+      const b = blobs[j]; if (b.kind === 2) continue;
+      const dx = b.x - a.x, dy = b.y - a.y, d = Math.hypot(dx, dy) + 1e-4;
+      const ph = Math.sin(mt * .07 + ((a.h ^ b.h) % 628) / 100);
+      const f = ph > 0 ? str * ph / (d + .1) : str * ph * .7 / (d + .06);
+      a.fx += dx / d * f; a.fy += dy / d * f; b.fx -= dx / d * f; b.fy -= dy / d * f;
+    }
+  }
+  // acceleration = force / mass
+  const damp = Math.exp(-lerp(1.5, 3.6, bv) * dt);       // 가벼우면 출렁이고, 무거우면 바로 가라앉는다
+  for (const b of blobs){
+    const m = mass * (b.li === 0 ? 1.4 : b.kind === 2 ? .6 : 1);
+    b.vx = (b.vx + b.fx / m * dt) * damp; b.vy = (b.vy + b.fy / m * dt) * damp;
+    b.x += b.vx * dt; b.y += b.vy * dt;
+  }
+  // 이동 기록 (마시는 동안)
+  if (S.phase === 'drinking'){
+    for (const b of blobs){
+      if (b.kind === 2 || (b.grp === 0 ? P.on0 : P.on1) < .5) continue;
+      const sp2 = Math.hypot(b.vx, b.vy);
+      if (sp2 < 1e-5) continue;
+      const k = Math.floor((Math.atan2(b.vy, b.vx) + Math.PI) / 6.2832 * 8) & 7;
+      hist[k] += sp2 * dt;
+    }
+    histCx += cx * dt; histCy += cy * dt; histT += dt;
+  }
+}
+
+/* ════════ WebGL ════════ */
+const canvas = $('#gl'), frame = $('#frame');
+const VS = `attribute vec2 aPos;void main(){gl_Position=vec4(aPos,0.,1.);}`;
+const FS = `
+precision highp float;
+#define NB 12
+uniform vec4 uRT;        // 해상도 x, y, 시간
+uniform vec4 uBlob[NB];  // 유기체 Gaussian: 중심 x, y (짧은 변 = 1 좌표), sigma, 밀도 가중치 (감정 비중 포함)
+uniform vec4 uBlobC[NB]; // 각 Gaussian의 색 (linear RGB)
+uniform vec4 uRF[17];    // 커피링 형태: k번째 각도 푸리에 계수 (윤곽 a, b, 안쪽 경계 a, b). [0] = 평균값들
+uniform vec4 uRG[4];     // 침전 지연 a, b, 띠 변화 a, b (k = 1..4)
+uniform vec4 uRS;        // 커피링 중심 x, y, 안쪽 경계 feather, 줄무늬 농도
+uniform vec4 uRC[7];     // 커피링 색 (linear RGB): 경계, 띠, 줄무늬, 테두리 빛, 안쪽 빛, 가운데, 윤곽선
+uniform vec4 uM0;        // -, 색 퍼짐(온도), 침전 진행 p, -
+uniform vec4 uM1;        // 외곽 임계값, feather, 잔향, 고리 혼합 지수
+uniform vec4 uM2;        // wA, wB, -, -
+uniform vec4 uM3;        // 유기체 표시 정도, -, -, -
+uniform vec3 uBg;
+
+float gaussianField(vec2 p, vec2 center, float sigma){
+  vec2 d = p - center;
+  return exp(-dot(d, d) / (2.0 * sigma * sigma));
+}
+float gaussianRing(float r, float radius, float width){
+  float d = r - radius;
+  return exp(-(d * d) / (2.0 * width * width));
+}
+vec3 linToOklab(vec3 c){
+  float l = .4122214708*c.r + .5363325363*c.g + .0514459929*c.b;
+  float m = .2119034982*c.r + .6806995451*c.g + .1073969566*c.b;
+  float s = .0883024619*c.r + .2817188376*c.g + .6299787005*c.b;
+  l = pow(max(l, 0.), 1./3.); m = pow(max(m, 0.), 1./3.); s = pow(max(s, 0.), 1./3.);
+  return vec3(.2104542553*l + .7936177850*m - .0040720468*s,
+              1.9779984951*l - 2.4285922050*m + .4505937099*s,
+              .0259040371*l + .7827717662*m - .8086757660*s);
+}
+vec3 toRGB(vec3 c){
+  float l_ = c.x + .3963377774*c.y + .2158037573*c.z;
+  float m_ = c.x - .1055613458*c.y - .0638541728*c.z;
+  float s_ = c.x - .0894841775*c.y - 1.291485548*c.z;
+  float l = l_*l_*l_, m = m_*m_*m_, s = s_*s_*s_;
+  vec3 lin = vec3(4.0767416621*l - 3.3077115913*m + .2309699292*s,
+                 -1.2684380046*l + 2.6097574011*m - .3413193965*s,
+                 -.0041960863*l - .7034186147*m + 1.707614701*s);
+  lin = clamp(lin, 0., 1.);
+  vec3 lo = lin*12.92, hi = 1.055*pow(lin, vec3(1./2.4)) - .055;
+  return mix(lo, hi, step(vec3(.0031308), lin));
+}
+void main(){
+  float P = uM0.z;
+  // 화면 비율을 보정한 연속 좌표 (짧은 변 = 1)
+  vec2 p = (gl_FragCoord.xy - 0.5 * uRT.xy) / min(uRT.x, uRT.y);
+
+  // ── 1) 유기체: 모든 Gaussian을 픽셀마다 직접 더하고, 색은 그 값으로 정규화한 가중합 ──
+  //    density = Σ q_i·G_i   ·   color = Σ w_i·c_i / Σ w_i
+  //    두 기분의 비중은 각 Gaussian의 q에 이미 곱해져 있어 (densityA·colorA + densityB·colorB)/(densityA + densityB)와 같다
+  float density = 0.;
+  float sumW = 0.;
+  vec3 sumC = vec3(0.);
+  for (int i = 0; i < NB; i++){
+    vec4 b = uBlob[i];
+    float g = b.w * gaussianField(p, b.xy, b.z);
+    density += g;
+    // 색의 퍼짐(온도): 같은 중심에서 sigma만 넓히거나 좁힌 가중치 → 경계 없이 스며든다
+    float w = b.w * gaussianField(p, b.xy, b.z * uM0.y) + 1e-6;
+    sumW += w;
+    sumC += w * uBlobC[i].rgb;
+  }
+  vec3 blobColor = sumC / max(sumW, 0.00001);
+  // 외곽: 전체 밀도의 합에 넓은 feather를 준 smoothstep → 가우시안처럼 부드럽게 사라진다
+  float alpha = smoothstep(uM1.x - uM1.y, uM1.x + uM1.y, density) * uM3.x;
+
+  vec3 orgLab = linToOklab(blobColor);
+
+  // ── 2) 커피링: 유기체의 실루엣이 그대로 접촉선이 되고, 가운데부터 색소가 빠져 가장자리로 모인다 ──
+  vec3 lab = orgLab;
+  float aTot = alpha;
+  if (P > 0.){
+    vec2 rv = p - uRS.xy;
+    float rr = length(rv);
+    vec2 cs = rv / max(rr, 1e-4);
+    // 각도 함수는 cos kθ, sin kθ의 점화식으로 계산한다 (atan 없음 → 이음매 없음)
+    float R = uRF[0].x, IE = uRF[0].y, DL = uRF[0].z, VR = uRF[0].w;
+    float ck = 1., sk = 0.;
+    for (int k = 1; k <= 16; k++){
+      float c2 = ck*cs.x - sk*cs.y;
+      sk = sk*cs.x + ck*cs.y; ck = c2;
+      vec4 f = uRF[k];
+      R  += f.x*ck + f.y*sk;
+      IE += f.z*ck + f.w*sk;
+      if (k <= 4){ vec4 g = uRG[k - 1]; DL += g.x*ck + g.y*sk; VR += g.z*ck + g.w*sk; }
+    }
+    R = max(R, .03);
+    float rn = rr / R;
+    float px = 1. / min(uRT.x, uRT.y);
+    float dist = rr - R;                                        // 윤곽까지의 거리 (화면 좌표)
+
+    // 진행: 윤곽은 먼저 자리를 잡고(eo), 가운데는 각도마다 조금씩 다른 때에 비워진다(q)
+    float eo = smoothstep(0., .55, P);
+    float dl = mix(uRF[0].z, DL, smoothstep(0., .45, rn));      // 중심은 고르게 시작한다
+    float q = smoothstep(0., 1., clamp((P - dl - .14*rn) / .5, 0., 1.));
+    float ie = uRF[0].y + (IE - uRF[0].y) * smoothstep(.15, 1., q); // 처음엔 둥글게 비워지고 점점 물결친다
+    float front = clamp(ie, .28, .8) * q;                        // 비워진 가운데의 가장자리
+    float fw = uRS.z * mix(2.6, 1., q);
+    float hollow = 1. - smoothstep(front - fw, front + fw, rn);
+    float u = clamp((rn - front) / max(1. - front, .05), 0., 1.);
+    float vr = clamp(VR, -1., 1.);
+
+    vec3 cF = linToOklab(uRC[0].rgb), cB = linToOklab(uRC[1].rgb), cS = linToOklab(uRC[2].rgb);
+    vec3 cH = linToOklab(uRC[3].rgb), cG = linToOklab(uRC[4].rgb), cC = linToOklab(uRC[5].rgb);
+    vec3 cL = linToOklab(uRC[6].rgb);
+    cH = vec3(max(cH.x, .87), cH.yz*.62);                        // 테두리 안쪽의 옅은 빛
+    cG = vec3(max(cG.x, .85), cG.yz*.75);                        // 비워진 가운데 가장자리의 빛
+    cC = vec3(max(cC.x, .955), cC.yz*.28);                       // 가장 밝은 가운데
+    cL = vec3(.3, cL.yz*.22);                                    // 마른 가장자리의 가는 선
+    // 색소 띠: 안쪽 경계 → 띠 → 줄무늬 → 띠 → 테두리 빛
+    vec3 band = mix(cF, cB, smoothstep(.02, .26, u));
+    float sc = .46 + .07*vr, sw = .17 + .035*vr;
+    float st = exp(-(u - sc)*(u - sc) / (sw*sw)) * uRS.w * (.72 + .28*vr);
+    band = mix(band, cS, st);
+    band = mix(band, cH, smoothstep(.76, .96, u));
+    band.yz *= 1. + .12*vr*(1. - smoothstep(.75, .95, u));      // 각도마다 조금 짙고 옅은 침전
+    float fr = exp(-(rn - front)*(rn - front) / ((fw*1.5 + .012)*(fw*1.5 + .012))) * q * (1. - hollow*.6);
+    band = vec3(band.x + .025*fr, band.yz*(1. + .14*fr));        // 빛나는 안쪽 경계
+    float tm = rn / max(uRF[0].y*q, 1e-3);                       // 가운데는 평균 반지름 기준으로 둥글게 밝아진다
+    float t = clamp(mix(tm, rn / max(front, 1e-3), smoothstep(.55, .9, tm)), 0., 1.);
+    vec3 cen = mix(cC, cG, smoothstep(.25, 1., t));
+    vec3 ringLab = mix(band, cen, hollow);
+    lab = mix(orgLab, ringLab, smoothstep(0., .7, q) * (1. - .18*(1. - hollow)));   // 띠에는 유기체의 결이 조금 남는다
+
+    // 실루엣: 유기체의 부드러운 밀도 외곽이 그대로 접촉선으로 굳는다
+    float ew = mix(.03, 1.1*px, eo);
+    float m = 1. - smoothstep(-ew, ew, dist);
+    aTot = mix(alpha, m, eo);
+    // 미세한 입자감
+    lab.x += (fract(sin(dot(floor(gl_FragCoord.xy), vec2(41.37, 289.11))) * 23421.631) - .5) * .028 * eo * m;
+    // 가는 윤곽선
+    float lw = max(.8*px, .0011);
+    float line = exp(-dist*dist / (2.*lw*lw)) * smoothstep(.3, .85, P) * .82;
+    lab = mix(lab, cL, line / max(aTot + line*(1. - aTot), 1e-4));
+    aTot = aTot + line*(1. - aTot);
+  }
+
+  // ── 3) 배경과는 마지막에 단 한 번 합성 ──
+  vec3 finalColor = mix(uBg, toRGB(lab), clamp(aTot, 0., 1.));
+  // 8비트 계단을 감추는 화면 좌표 기반의 미세한 디더 (형태와 무관)
+  finalColor += (fract(sin(dot(gl_FragCoord.xy, vec2(12.9898, 78.233))) * 43758.5453) - .5) / 255.;
+  gl_FragColor = vec4(finalColor, 1.);
+}`;
+
+let gl = null, prog = null, U = {}, glOK = false, lost = false;
+const uA = new Float32Array(MAX*4), uK = new Float32Array(MAX*4);
+const uRC = new Float32Array(28);
+
+function showFallback(msg){ const fb = $('#fallback'); fb.textContent = msg; fb.hidden = false; canvas.style.visibility = 'hidden'; }
+function compile(type, src){ const s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s); return gl.getShaderParameter(s, gl.COMPILE_STATUS) ? s : null; }
+function initGL(){
+  glOK = false;
+  try {
+    gl = canvas.getContext('webgl', {alpha:false, antialias:false, depth:false, stencil:false, preserveDrawingBuffer:true})
+      || canvas.getContext('experimental-webgl', {alpha:false, preserveDrawingBuffer:true});
+  } catch (e) { gl = null; }
+  if (!gl){ showFallback('이 브라우저에서 WebGL을 사용할 수 없어 유기체를 그릴 수 없습니다. 하드웨어 가속을 켜거나 최신 Chrome, Safari, Firefox로 열어 주세요. 기록 입력과 저장은 그대로 사용할 수 있습니다.'); return; }
+  const v = compile(gl.VERTEX_SHADER, VS), f = compile(gl.FRAGMENT_SHADER, FS);
+  if (!v || !f){ showFallback('이 기기의 그래픽 드라이버가 작품의 셰이더를 지원하지 않습니다. 다른 브라우저나 기기에서 열어 주세요.'); gl = null; return; }
+  prog = gl.createProgram(); gl.attachShader(prog, v); gl.attachShader(prog, f);
+  gl.bindAttribLocation(prog, 0, 'aPos'); gl.linkProgram(prog);
+  if (!gl.getProgramParameter(prog, gl.LINK_STATUS)){ showFallback('작품의 셰이더를 준비하지 못했습니다. 다른 브라우저에서 열어 주세요.'); gl = null; return; }
+  ['uRT','uBlob','uBlobC','uRF','uRG','uRS','uRC','uM0','uM1','uM2','uM3','uBg']
+    .forEach(n => U[n] = gl.getUniformLocation(prog, n));
+  const buf = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 3,-1, -1,3]), gl.STATIC_DRAW);
+  gl.enableVertexAttribArray(0);
+  gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+  gl.useProgram(prog);
+  glOK = true;
+  resize();
+}
+function resize(){
+  if (!gl) return;
+  // 창 크기 × devicePixelRatio(최대 2). 아주 큰 화면은 픽셀 수 상한으로 성능을 지킨다
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const cw = canvas.clientWidth || window.innerWidth, ch = canvas.clientHeight || window.innerHeight;
+  let w = Math.max(1, Math.round(cw * dpr)), h = Math.max(1, Math.round(ch * dpr));
+  const k = Math.sqrt(Math.min(1, 3.4e6 / (w * h)));
+  w = Math.max(1, Math.round(w * k)); h = Math.max(1, Math.round(h * k));
+  if (canvas.width !== w || canvas.height !== h){
+    canvas.width = w; canvas.height = h;
+    if (glOK && !lost) draw();                                // 크기가 바뀌면 바로 다시 그린다
+  }
+  wake();
+}
+
+// 감정 그룹별 기준 밀도: 그룹 안 덩어리 중심들에서의 최대 밀도
+function peakDensity(grp){
+  let mx = 0;
+  for (const bi of blobs){
+    if (bi.grp !== grp || bi.kind === 2) continue;
+    const px = uA[bi.i*4], py = uA[bi.i*4+1];
+    let F = 0;
+    for (const bj of blobs){
+      if (bj.grp !== grp || bj.kind === 2) continue;
+      const o = bj.i*4;
+      const dx = px - uA[o], dy = py - uA[o+1];
+      const c = Math.cos(uK[o+3]), s = Math.sin(uK[o+3]);
+      const rx = (c*dx + s*dy) / uK[o+2], ry = (-s*dx + c*dy) * uK[o+2];
+      F += uA[o+3] * Math.exp(-(rx*rx + ry*ry) / (2 * uA[o+2] * uA[o+2]));
+    }
+    if (F > mx) mx = F;
+  }
+  return Math.max(mx, .3);
+}
+
+// 유기체: 덩어리마다 하나의 Gaussian. 위치·크기는 물리 시뮬레이션에서, 색은 기분 팔레트에서
+const BLOB_COLOR = [0, 1, 2, 3, 4, 3];                      // li → 팔레트 색 (중심핵, 내부, 중간, 외곽, 강조, 외곽 안개)
+const ORG_K = 1.3;                                          // 시뮬레이션 좌표 → 화면 크기
+const uBlob = new Float32Array(48), uBlobC = new Float32Array(48);
+
+function draw(){
+  if (!glOK || lost) return;
+  const p = S.p, aft = P.aft;
+  const tS = lerp(.8, 1.3, P.temp);                          // 온도: 색이 스며드는 넓이
+
+  // ── 유기체 Gaussian ──
+  for (const b of blobs){
+    const g = b.ring, o = b.i * 4;
+    const on = b.grp === 0 ? P.on0 : P.on1;
+    const wg = b.grp === 0 ? P.w0 : P.w1;                    // 기분 비중 → 밀도 가중치
+    let x = b.x, y = b.y, s = b.s, q = b.q;
+    if (g && p > 0){                                         // 침전: 제자리에서 조금 바깥으로 번진다
+      x = lerp(x, g.x, p); y = lerp(y, g.y, p); s = lerp(s, g.s, p); q = lerp(q, g.q * on, p);
+    }
+    const qq = (b.kind === 2 ? q * .3 : q) * Math.min(1, wg * 2) * on;
+    uBlob[o] = x * ORG_K * .5; uBlob[o+1] = y * ORG_K * .5;
+    uBlob[o+2] = Math.max(s * ORG_K * .5, 1e-3); uBlob[o+3] = Math.max(qq, 0);
+    const c = colCur[b.grp], j = BLOB_COLOR[b.li] * 3;
+    uBlobC[o] = c[j]; uBlobC[o+1] = c[j+1]; uBlobC[o+2] = c[j+2]; uBlobC[o+3] = 0;
+  }
+
+  // ── 커피링 색: 기분 팔레트에서 (주된 기분 = 띠, 두 번째 기분 = 띠 속 줄무늬) ──
+  const ga = P.on0 >= P.on1 ? 0 : 1, A = colCur[ga], B = colCur[1 - ga];
+  const both = Math.min(P.on0, P.on1);
+  const pick = (c, j) => [c[j*3], c[j*3+1], c[j*3+2]];
+  const mixc = (a, b, t) => [lerp(a[0], b[0], t), lerp(a[1], b[1], t), lerp(a[2], b[2], t)];
+  const dk = 1 - .12 * aft;                                  // 잔향이 강할수록 짙은 띠
+  const rc = [
+    pick(A, 1),                                              // 안쪽 경계
+    pick(A, 0).map(v => v * dk),                             // 띠
+    mixc(pick(A, 1), pick(B, 0), both).map(v => v * dk),     // 줄무늬
+    mixc(pick(A, 3), mixc(pick(A, 3), pick(B, 3), .5), both), // 테두리 빛
+    mixc(pick(A, 4), pick(A, 3), .5),                        // 안쪽 빛
+    mixc(pick(A, 2), pick(B, 1), both),                      // 가운데
+    pick(A, 0)                                               // 윤곽선
+  ];
+  rc.forEach((c, i) => { uRC[i*4] = c[0]; uRC[i*4+1] = c[1]; uRC[i*4+2] = c[2]; uRC[i*4+3] = 0; });
+  const pv = Math.pow(p, 1.6);                               // 눈에 보이는 변화가 침전 시간 전체에 고르게 퍼지도록
+
+  const W = canvas.width, H = canvas.height;
+  gl.viewport(0, 0, W, H);
+  gl.uniform4f(U.uRT, W, H, mt, 0);                         // resolution: 짧은 변 기준으로 비율을 보정
+  gl.uniform4fv(U.uBlob, uBlob); gl.uniform4fv(U.uBlobC, uBlobC);
+  gl.uniform4fv(U.uRF, ring.F); gl.uniform4fv(U.uRG, ring.G); gl.uniform4fv(U.uRC, uRC);
+  gl.uniform4f(U.uRS, ring.ox, ring.oy, lerp(.022, .06, P.temp), .55 + .4 * aft);
+  gl.uniform4f(U.uM0, ring.Rout, tS, pv, 1);
+  gl.uniform4f(U.uM1, .5, .27, aft, lerp(.85, 2.6, P.rel));   // 외곽 임계값 · feather (모든 기분 공통)
+  gl.uniform4f(U.uM2, P.w0, P.w1, 0, 0);
+  gl.uniform4f(U.uM3, 1, 0, 0, 0);
+  gl.uniform3f(U.uBg, BG[0], BG[1], BG[2]);
+  gl.drawArrays(gl.TRIANGLES, 0, 3);
+}
+
+/* ════════ 루프 ════════ */
+let last = 0, settleFrames = 0, lastShownSec = -1, lastPct = -1;
+function wake(){ settleFrames = 0; }
+function loop(now){
+  const dt = last ? Math.min(.05, (now - last) / 1000) : .016;
+  last = now;
+  const active = !paused && (S.phase !== 'done' || S.returning || settleFrames < 150);
+  if (active){ update(dt); draw(); settleFrames++; }
+  else if (settleFrames < 150 && paused){ draw(); settleFrames = 150; }
+  tickUI(now);
+  requestAnimationFrame(loop);
+}
+function elapsedSec(now){
+  const real = (now - S.startedAt) / 1000;
+  return S.demo ? real * 60 : real;
+}
+function tickUI(now){
+  let sec = null;
+  if (S.phase === 'drinking') sec = elapsedSec(now);
+  else if (S.phase !== 'pre') sec = S.durationSec;
+  if (sec !== null){
+    const whole = Math.floor(sec);
+    if (whole !== lastShownSec){
+      lastShownSec = whole;
+      const t = fmtClock(sec);
+      $('#timer').textContent = t;
+      $('#clock').textContent = t;
+    }
+  }
+  if (S.phase === 'settling' || S.phase === 'done'){
+    const pct = Math.round(S.p * 100);
+    if (pct !== lastPct){
+      lastPct = pct;
+      $('#statePct').textContent = pct + '%';
+      $('#barFill').style.width = pct + '%';
+      $('#bar').setAttribute('aria-valuenow', String(pct));
+      if (S.phase === 'settling') $('#tagText').textContent = `침전 중 · ${pct}%`;
+    }
+  }
+}
+
+/* ════════ 문장 · 기록 ════════ */
+function moodPct(){ const a = Math.round(S.ratio * 100); return [a, 100 - a]; }
+function moodName(){
+  const [a, b] = S.moods;
+  if (a && b) return `${MOODS[a].ko} + ${MOODS[b].ko}`;
+  return MOODS[a || b].ko;
+}
+function moodRecord(){ const [a, b] = S.moods; return a && b ? `${moodName()} · ${relKo(relation(a, b))}` : moodName(); }
+function moodAdj(){ const [a, b] = S.moods; return a && b ? `${MOODS[a].conn} ${MOODS[b].adj}` : MOODS[a || b].adj; }
+function speedWord(){ return SPEEDS[S.speed].adv; }
+function specNo(){ return 'No. ' + (hashStr(recordKey()) % 900 + 100); }
+
+function sentence(){
+  const sp = SP();
+  switch (S.phase){
+    case 'pre': return `${sp.adj} 곳에서 ${TEMPS[S.temp].adj} 커피의 첫 모금을 기다린다.`;
+    case 'drinking': return `${moodAdj()} 마음으로, ${speedWord()} ${BODIES[S.body].adj} ${TEMPS[S.temp].adj} 커피를 마시는 중이다.`;
+    case 'after': return `${fmtKo(S.durationSec)} 동안 마신 한 잔. 잔향은 얼마나 남았나요?`;
+    default: return `${fmtKo(S.durationSec)} 동안 ${speedWord()} 마신 한 잔, 잔향은 ${S.after ? AFTER[S.after].past : '아직 정해지지 않았다'}.`;
+  }
+}
+function recordRows(){
+  return [
+    ['음용 시간', `${fmtKo(S.durationSec)}${S.demo ? ' (시연 속도)' : ''}`],
+    ['고리 구조', `${ring.n}겹 · 정규화 시간 d = ${ring.d.toFixed(2)}`],
+    ['마시는 속도', SPEEDS[S.speed].ko],
+    ['기분', moodRecord()],
+    ['바디감', BODIES[S.body].ko],
+    ['애프터테이스트', S.after ? AFTER[S.after].ko : '—'],
+    ['공간', SP().ko],
+    ['커피의 온도', TEMPS[S.temp].ko]
+  ];
+}
+function renderRecord(){
+  $('#record').innerHTML = recordRows().map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('');
+}
+function refreshText(){
+  $('#sentence').textContent = sentence();
+  const tag = S.phase === 'done' ? `${specNo()} · 침전 완료` : S.phase === 'settling' ? `침전 중 · ${Math.round(S.p*100)}%` : S.phase === 'pre' ? '마시기 전' : '유동 상태';
+  $('#tagText').textContent = tag;
+  canvas.setAttribute('aria-label', `${tag}. ${sentence()}`);
+  const sm = $('#summary');
+  if (S.phase === 'pre') sm.hidden = true;
+  else { sm.hidden = false; sm.textContent = `${moodName()} · ${SP().ko} · ${TEMPS[S.temp].ko}`; }
+  if (S.phase === 'settling' || S.phase === 'done') renderRecord();
+}
+
+/* ════════ 단계 전환 ════════ */
+const STEP_OF = {pre:'pre', drinking:'drinking', after:'after', settling:'settle', done:'settle'};
+const STEP_ORDER = ['pre','drinking','after','settle'];
+function setPhase(ph){
+  S.phase = ph;
+  $('#secPre').hidden = ph !== 'pre';
+  $('#secDrink').hidden = ph !== 'drinking';
+  $('#secAfter').hidden = !(ph === 'after' || ph === 'settling' || ph === 'done');
+  $('#secSettle').hidden = !(ph === 'settling' || ph === 'done');
+  $('#btnSettle').hidden = ph !== 'after';
+  const cur = STEP_ORDER.indexOf(STEP_OF[ph]);
+  document.querySelectorAll('#steps li').forEach((li, i) => {
+    li.classList.toggle('on', i === cur); li.classList.toggle('past', i < cur);
+    if (i === cur) li.setAttribute('aria-current', 'step'); else li.removeAttribute('aria-current');
+  });
+  const done = ph === 'done';
+  $('#btnPng').disabled = !done; $('#btnJson').disabled = !done;
+  $('#btnNew').hidden = !done;
+  if (S.viewing){ $('#secAfter').hidden = true; }
+  const v = $('#viewing');
+  v.hidden = !S.viewing;
+  if (S.viewing) v.textContent = `보관된 실험을 보고 있습니다 · ${S.viewing.when}. 새 실험은 아래 버튼이나 초기화로 시작하세요.`;
+  renderArchive();
+  if (ph === 'pre'){ $('#clock').textContent = '00:00'; lastShownSec = -1; }
+  lastPct = -1;
+  refreshText();
+  wake();
+}
+
+function startDrinking(){
+  S.startedAt = performance.now(); S.startedWall = new Date();
+  hist.fill(0); histCx = histCy = histT = 0;
+  phase = 0;
+  S.demo = false;
+  lastShownSec = -1;
+  setPhase('drinking');
+  const fm = document.querySelector('input[name=mood]'); if (fm) fm.focus();
+}
+function endDrinking(){
+  S.durationSec = elapsedSec(performance.now());
+  setPhase('after');
+  const first = document.querySelector('input[name=after]');
+  if (first) first.focus();
+}
+function startSettle(){
+  if (!S.after) return;
+  buildRing();
+  S.tS = 0; S.p = 0; S.returning = false;
+  setPhase('settling');
+  $('#stateName').textContent = '증발 중';
+}
+function finishSettle(){
+  const seed = hashStr(recordKey());
+  S.record = {
+    번호: specNo(), seed: seed.toString(16).toUpperCase().padStart(8, '0'),
+    시작: S.startedWall ? S.startedWall.toISOString() : null,
+    음용시간_초: Math.round(S.durationSec), 시연속도: S.demo,
+    정규화시간_d: +ring.d.toFixed(3), 고리수: ring.n,
+    마시는속도: SPEEDS[S.speed].ko,
+    기분: {선택: S.moods.filter(Boolean).map(id => MOODS[id].ko),
+          관계: S.moods[0] && S.moods[1] ? relKo(relation(S.moods[0], S.moods[1])) : '하나의 기분', 표현: moodName()},
+    바디감: BODIES[S.body].ko, 애프터테이스트: AFTER[S.after].ko, 공간: SP().ko, 커피온도: TEMPS[S.temp].ko
+  };
+  setPhase('done');
+  $('#stateName').textContent = '침전 완료 · 움직임 정지';
+  archiveCurrent();
+}
+
+function reset(){
+  // 처음 화면으로: 입력값, 단계, 유기체를 모두 첫 상태로 되돌린다
+  S.moods = [...DEFAULTS.moods]; S.moodTouched = false; S.ratio = DEFAULTS.ratio; S.openness = DEFAULTS.openness; S.density = DEFAULTS.density; refreshSpace(); S.temp = DEFAULTS.temp; S.demo = DEFAULTS.demo;
+  S.speed = DEFAULTS.speed; S.irr = 0; S.body = DEFAULTS.body; S.after = null; S.durationSec = 0;
+  S.record = null; S.viewing = null; S.archiveId = null; S.startedWall = null;
+  S.phase = 'pre'; S.p = 0; S.tS = 0; S.returning = false;
+  ring.N = null; ring.n = 0; ring.cx = ring.cy = 0;
+  blobs.forEach(b => { b.ring = null; b.vx = b.vy = 0; });
+  hist.fill(0); histCx = histCy = histT = 0;
+  mt = 0; phase = 0; breathG = 0;
+  Object.assign(P, {w0:1, w1:0, on0:1, on1:0, rel:0, temp:TEMPS[DEFAULTS.temp].v, open:SP().open, crowd:SP().crowd, body:BODIES[S.body].v,
+                    speed:SPEEDS[S.speed].v, irr:0, mA:.55, aft:0});
+  clearTimeout(archiveTimer);
+  snapColors();
+  layoutReady = false;                                       // 유기체가 중심에서 다시 자라난다
+  buildLayout(); syncInputs();
+  if (paused) setPaused(false);
+  setPhase('pre');
+  $('#stateName').textContent = '증발 중';
+  try { window.scrollTo(0, 0); } catch (e) {}
+  $('.panel').scrollTop = 0;
+  const firstSpace = document.querySelector('#openness'); if (firstSpace) firstSpace.focus({preventScroll:true});
+}
+
+/* ════════ 실험 기록 보관 (이 브라우저의 localStorage) ════════ */
+const STORE_KEY = 'coffee-ring-trace:archive:v1';
+const ARCHIVE_MAX = 40;
+let archiveTimer = 0, pendingDelete = null;
+function loadArchive(){
+  try { const v = JSON.parse(localStorage.getItem(STORE_KEY) || '[]'); return Array.isArray(v) ? v : []; }
+  catch (e) { return []; }
+}
+function storeArchive(list){
+  for (let tries = 0; tries < 6; tries++){
+    try { localStorage.setItem(STORE_KEY, JSON.stringify(list)); return true; }
+    catch (e) { if (list.length <= 1) return false; list.pop(); }       // 공간이 부족하면 가장 오래된 기록부터 비운다
+  }
+  return false;
+}
+function thumbnail(){
+  if (!glOK) return null;
+  try {
+    draw();
+    const c = document.createElement('canvas'); c.width = c.height = 160;
+    const sq = Math.min(canvas.width, canvas.height);
+    c.getContext('2d').drawImage(canvas, (canvas.width - sq) / 2, (canvas.height - sq) / 2, sq, sq, 0, 0, 160, 160);
+    return c.toDataURL('image/jpeg', .82);
+  } catch (e) { return null; }
+}
+function takeSnap(){
+  const A = a => Array.from(a);
+  return {
+    S:{moods:[...S.moods], ratio:S.ratio, openness:S.openness, density:S.density, space:S.space, temp:S.temp, demo:S.demo, speed:S.speed, body:S.body, after:S.after,
+       durationSec:S.durationSec, startedWall:S.startedWall ? S.startedWall.toISOString() : null},
+    P:{...P}, mt, phase,
+    ring:{n:ring.n, R:A(ring.R), W:A(ring.W), rel:A(ring.rel), Rout:ring.Rout, N:ring.N ? [...ring.N] : null, eps:ring.eps, k:ring.k, ph:ring.ph,
+          noise:ring.noise, nz:[...ring.nz], h1:ring.h1, p1:ring.p1, h2:ring.h2, p2:ring.p2, cx:ring.cx, cy:ring.cy, rate:ring.rate, d:ring.d,
+          F:A(ring.F), G:A(ring.G), ox:ring.ox, oy:ring.oy},
+    blobs:blobs.map(b => ({x:b.x, y:b.y, s:b.s, q:b.q, asp:b.asp, ang:b.ang, ring:b.ring ? {...b.ring} : null}))
+  };
+}
+function loadSnap(sn){
+  Object.assign(S, sn.S); delete S.mood;
+  S.moods = Array.isArray(sn.S.moods) ? [...sn.S.moods] : ['comfort', null];
+  if (typeof S.ratio !== 'number') S.ratio = .5;
+  if (!TEMPS[S.temp]) S.temp = 'warm';
+  if (!SPEEDS[S.speed]) S.speed = typeof S.speed === 'number' ? (S.speed < .34 ? 'slow' : S.speed > .66 ? 'fast' : 'mid') : 'mid';   // 이전 기록의 연속값 변환
+  S.irr = 0; P.irr = 0;
+  delete S.humidity;
+  P.temp = TEMPS[S.temp].v;
+  if (!sn.S.openness){                                         // 이전 버전 기록의 공간 4종을 두 축으로 옮긴다
+    const m = {openQuiet:['open','quiet'], openBusy:['open','busy'], closedQuiet:['closed','quiet'], closedBusy:['closed','busy']}[sn.S.space] || ['open','quiet'];
+    S.openness = m[0]; S.density = m[1];
+  }
+  refreshSpace(); S.startedWall = sn.S.startedWall ? new Date(sn.S.startedWall) : null;
+  Object.assign(P, sn.P);
+  if (!('w0' in sn.P)){ const wt = moodWeights(); P.w0 = wt[0]; P.w1 = wt[1]; P.on0 = S.moods[0] ? 1 : 0; P.on1 = S.moods[1] ? 1 : 0; P.rel = relation(S.moods[0], S.moods[1]); }
+  snapColors(); mt = sn.mt; phase = sn.phase; breathG = 0;
+  const g = sn.ring;
+  Object.assign(ring, {n:g.n, Rout:g.Rout, N:Array.isArray(g.N) ? [...g.N] : (g.N ? [g.N, g.N] : null), eps:g.eps, k:g.k, ph:g.ph, noise:g.noise, nz:[...g.nz], h1:g.h1, p1:g.p1, h2:g.h2, p2:g.p2,
+                       cx:g.cx, cy:g.cy, rate:g.rate, d:g.d});
+  ring.R.set(g.R); ring.W.set(g.W); ring.rel.set(g.rel);
+  if (Array.isArray(g.F) && g.F.length === ring.F.length && Array.isArray(g.G)){ ring.F.set(g.F); ring.G.set(g.G); ring.ox = g.ox || 0; ring.oy = g.oy || 0; }
+  else fallbackRing();                                        // 이전 버전의 기록
+  sn.blobs.forEach((o, i) => { const b = blobs[i]; if (!b) return; Object.assign(b, {x:o.x, y:o.y, s:o.s, q:o.q, asp:o.asp, ang:o.ang, vx:0, vy:0}); b.ring = o.ring ? {...o.ring} : null; });
+  S.p = 1; S.tS = 0; S.returning = false;
+}
+function fmtWhen(d){ return `${d.getMonth()+1}월 ${d.getDate()}일 ${pad2(d.getHours())}:${pad2(d.getMinutes())}`; }
+function makeEntry(id){
+  return {id, savedAt:new Date().toISOString(), no:specNo(), sentence:sentence(), record:{...S.record, 애프터테이스트:AFTER[S.after].ko},
+          thumb:thumbnail(), snap:takeSnap()};
+}
+function archiveCurrent(){
+  if (S.viewing || !S.record) return;
+  const list = loadArchive();
+  const id = 'r' + Date.now().toString(36);
+  S.archiveId = id;
+  list.unshift(makeEntry(id));
+  if (list.length > ARCHIVE_MAX) list.length = ARCHIVE_MAX;
+  storeArchive(list);
+  renderArchive();
+}
+function scheduleArchiveUpdate(){
+  if (S.viewing || !S.archiveId) return;
+  clearTimeout(archiveTimer);
+  // 잔향 농도가 다 바뀐 뒤의 모습으로 갱신
+  archiveTimer = setTimeout(() => {
+    const list = loadArchive(), i = list.findIndex(e => e.id === S.archiveId);
+    if (i < 0) return;
+    list[i] = {...makeEntry(S.archiveId), savedAt:list[i].savedAt};
+    storeArchive(list); renderArchive();
+  }, 1600);
+}
+function renderArchive(){
+  const list = loadArchive();
+  const ul = $('#archiveList');
+  const busy = S.phase === 'drinking' || S.phase === 'after' || S.phase === 'settling';
+  $('#archiveCount').textContent = list.length ? `${list.length}개` : '';
+  $('#archiveTools').hidden = !list.length;
+  $('#archiveNote').textContent = !list.length
+    ? '침전이 끝난 실험은 이 브라우저에 자동으로 보관됩니다. 기록을 누르면 그 커피링을 다시 볼 수 있습니다.'
+    : busy ? '지금의 실험이 끝나면 지난 기록을 열어 볼 수 있습니다.' : '기록을 누르면 그 커피링을 다시 볼 수 있습니다.';
+  const cur = S.viewing ? S.viewing.id : S.archiveId;
+  ul.innerHTML = list.map(e => {
+    const d = new Date(e.savedAt);
+    const del = pendingDelete === e.id;
+    return `<li><button type="button" class="arch-item" data-open="${e.id}" ${busy ? 'disabled' : ''} aria-current="${e.id === cur}">
+      ${e.thumb ? `<img src="${e.thumb}" alt="">` : '<i class="ph"></i>'}
+      <span><b>${esc(e.no)}</b><time datetime="${e.savedAt}">${fmtWhen(d)}</time><em>${esc(e.sentence)}</em></span></button>
+      <button type="button" class="arch-del${del ? ' confirm' : ''}" data-del="${e.id}" aria-label="${esc(e.no)} 기록 ${del ? '삭제 확인' : '삭제'}">${del ? '삭제 확인' : '삭제'}</button></li>`;
+  }).join('');
+}
+function onArchiveClick(e){
+  const del = e.target.closest('[data-del]'), open = e.target.closest('[data-open]');
+  if (del){
+    const id = del.dataset.del;
+    if (pendingDelete !== id){ pendingDelete = id; renderArchive(); return; }   // 한 번 더 눌러야 삭제된다
+    const list = loadArchive().filter(x => x.id !== id);
+    storeArchive(list); pendingDelete = null;
+    if (S.archiveId === id) S.archiveId = null;
+    if (S.viewing && S.viewing.id === id) reset(); else renderArchive();
+    return;
+  }
+  if (open && !open.disabled){
+    pendingDelete = null;
+    const entry = loadArchive().find(x => x.id === open.dataset.open);
+    if (!entry || !entry.snap) return;
+    loadSnap(entry.snap);
+    S.viewing = {id:entry.id, when:fmtWhen(new Date(entry.savedAt))};
+    S.archiveId = null;
+    S.record = entry.record;
+    syncInputs();
+    if (paused) setPaused(false);
+    setPhase('done');
+    $('#stateName').textContent = '침전 완료 · 움직임 정지';
+    lastShownSec = -1;
+    $('#clock').textContent = fmtClock(S.durationSec);
+    try { window.scrollTo(0, 0); } catch (err) {}
+  }
+}
+function exportAll(){
+  const list = loadArchive().map(e => ({번호:e.no, 저장:e.savedAt, 문장:e.sentence, ...e.record}));
+  download(new Blob([JSON.stringify(list, null, 2)], {type:'application/json'}), '한잔의흔적-전체기록.json');
+}
+const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+
+/* ════════ 패널 ════════ */
+function chips(el, name, order, data, type){
+  el.innerHTML = order.map(id => `<label class="chip"><input type="${type}" name="${name}" id="${name}-${id}" value="${id}"><span>${data[id].ko}</span></label>`).join('');
+}
+function renderMood(){
+  updatePair();
+  document.querySelectorAll('input[name=mood]').forEach(i => i.checked = S.moods.includes(i.value));
+  const sel = S.moods.filter(Boolean);
+  $('#moodSel').innerHTML = `선택한 기분: <b>${sel.map(id => MOODS[id].ko).join(' + ')}</b>`;
+  const two = !!(S.moods[0] && S.moods[1]);
+  if (two){
+    const r = relation(S.moods[0], S.moods[1]);
+    $('#moodMaps').textContent = r < .25 ? '비슷한 감정이라 두 색 덩어리가 가까이 붙어 넓고 부드럽게 섞입니다.'
+      : r > .75 ? '대비되는 감정이라 두 색 덩어리가 조금 떨어져 각자의 색을 지키고, 겹치는 곳에서만 또렷하게 맞닿습니다.'
+      : '서로 다른 감정이라 두 색 덩어리가 적당한 거리를 두고 겹칩니다.';
+  } else $('#moodMaps').textContent = MOODS[sel[0]].map;
+  refreshText();
+}
+function swapGroups(){
+  const keys = ['x','y','vx','vy','s','q','asp','ang'];
+  for (let li = 0; li < PER_GROUP; li++){
+    const a = blobs[li], b = blobs[PER_GROUP + li];
+    for (const k of keys){ const t = a[k]; a[k] = b[k]; b[k] = t; }
+  }
+  const c = new Float32Array(colCur[0]); colCur[0].set(colCur[1]); colCur[1].set(c);
+  let t = P.w0; P.w0 = P.w1; P.w1 = t;
+  t = P.on0; P.on0 = P.on1; P.on1 = t;
+  S.moods = [S.moods[1], S.moods[0]];
+}
+let moodMsgTimer = 0;
+function showMoodMsg(t){
+  $('#moodMsg').textContent = t;
+  clearTimeout(moodMsgTimer);
+  moodMsgTimer = setTimeout(() => { $('#moodMsg').textContent = ''; }, 3500);
+}
+function onMoodChange(e){
+  const input = e.target; if (input.name !== 'mood') return;
+  const id = input.value, sel = S.moods.filter(Boolean);
+  if (input.checked){
+    if (!S.moodTouched && sel.length === 1){                 // 처음 고르는 기분은 기본값(편안함)을 대신한다
+      S.moods = [id, null]; S.moodTouched = true;
+      $('#moodMsg').textContent = ''; renderMood(); wake(); return;
+    }
+    S.moodTouched = true;
+    if (sel.length >= 2){ input.checked = false; showMoodMsg('기분은 최대 2개까지 선택할 수 있어요.'); return; }
+    S.moods[S.moods[0] ? 1 : 0] = id;
+  } else {
+    if (sel.length <= 1){ input.checked = true; showMoodMsg('기분은 최소 1개를 선택해야 해요.'); return; }
+    const slot = S.moods.indexOf(id);
+    S.moods[slot] = null;
+    if (slot === 0) swapGroups();                             // 남은 기분을 첫 번째 자리로: 형태와 색은 그대로 이어진다
+  }
+  $('#moodMsg').textContent = '';
+  renderMood(); wake();
+}
+
+function buildPanel(){
+  chips($('#bodyChips'), 'body', BODY_ORDER, BODIES, 'radio');
+  chips($('#afterChips'), 'after', AFTER_ORDER, AFTER, 'radio');
+
+  // 공간의 상태: 단계형 막대 슬라이더 (드래그 · 클릭 · 방향키)
+  const setSpace = (key, order, v) => {
+    const id = order[clamp(Math.round(v), 0, order.length - 1)];
+    if (S[key] === id) return;
+    S[key] = id; refreshSpace(); renderSpace(); buildLayout(); refreshText(); wake();
+  };
+  [['openness', OPEN_ORDER], ['density', DENS_ORDER]].forEach(([key, order]) => {
+    const el = $('#' + key);
+    el.addEventListener('input', () => setSpace(key, order, +el.value));
+    $('#' + key + 'Ticks').addEventListener('click', e => {
+      const t = e.target.closest('[data-v]'); if (!t) return;
+      el.value = t.dataset.v; setSpace(key, order, +t.dataset.v); el.focus();
+    });
+  });
+  $('#bodyChips').addEventListener('change', e => { S.body = e.target.value; $('#bodyMaps').textContent = BODIES[S.body].map; refreshText(); });
+  $('#afterChips').addEventListener('change', e => {
+    S.after = e.target.value; $('#btnSettle').disabled = false;
+    if (S.phase === 'settling' || S.phase === 'done'){
+      if (S.record) S.record.애프터테이스트 = AFTER[S.after].ko;
+      refreshText();
+      if (S.phase === 'done') scheduleArchiveUpdate();
+    }
+    wake();
+  });
+  // 커피의 온도: 4단계 막대 슬라이더
+  const tEl = $('#temp');
+  const setTemp = v => { const id = TEMP_ORDER[clamp(Math.round(v), 0, 3)]; if (S.temp === id) return; S.temp = id; renderTemp(); refreshText(); wake(); };
+  tEl.addEventListener('input', () => setTemp(+tEl.value));
+  $('#tempTicks').addEventListener('click', e => { const t = e.target.closest('[data-v]'); if (!t) return; tEl.value = t.dataset.v; setTemp(+t.dataset.v); tEl.focus(); });
+  // 마시는 속도: 3단계 막대 슬라이더
+  const spEl = $('#speed');
+  const setSpeed = v => { const id = SPEED_ORDER[clamp(Math.round(v), 0, 2)]; if (S.speed === id) return; S.speed = id; renderSpeed(); refreshText(); wake(); };
+  spEl.addEventListener('input', () => setSpeed(+spEl.value));
+  $('#speedTicks').addEventListener('click', e => { const t = e.target.closest('[data-v]'); if (!t) return; spEl.value = t.dataset.v; setSpeed(+t.dataset.v); spEl.focus(); });
+
+  // 기분 선택: 최대 2개, 두 개면 비율 슬라이더
+  $('#moodChips').innerHTML = MOOD_ORDER.map(id => { const c = moodPalettes[id];
+    return `<label class="chip"><input type="checkbox" name="mood" id="mood-${id}" value="${id}"><span><i class="mdot" style="background:radial-gradient(circle at 40% 40%, ${c[0]} 0 30%, ${c[2]} 62%, ${c[3]})" aria-hidden="true"></i>${MOODS[id].ko}</span></label>`; }).join('');
+  $('#moodChips').addEventListener('change', onMoodChange);
+
+  $('#btnStart').addEventListener('click', startDrinking);
+  $('#btnEnd').addEventListener('click', endDrinking);
+  $('#btnSettle').addEventListener('click', startSettle);
+  $('#btnReset').addEventListener('click', reset);
+  $('#btnNew').addEventListener('click', reset);
+  $('#btnExportAll').addEventListener('click', exportAll);
+  $('#archiveList').addEventListener('click', onArchiveClick);
+  $('#btnPause').addEventListener('click', () => setPaused(!paused));
+  $('#btnPng').addEventListener('click', savePNG);
+  $('#btnJson').addEventListener('click', saveJSON);
+}
+function syncInputs(){
+  renderSpace();
+  document.querySelectorAll('input[name=body]').forEach(i => i.checked = i.value === S.body);
+  document.querySelectorAll('input[name=after]').forEach(i => i.checked = i.value === S.after);
+  renderTemp();
+  renderSpeed();
+  $('#spaceMaps').textContent = SP().map;
+  $('#bodyMaps').textContent = BODIES[S.body].map;
+  $('#btnSettle').disabled = !S.after;
+  renderMood();
+}
+function renderSpeed(){
+  const i = SPEED_ORDER.indexOf(S.speed), word = SPEEDS[S.speed].ko, el = $('#speed');
+  el.value = i; el.setAttribute('aria-valuetext', word);
+  $('#speedOut').textContent = word;
+  $('#speedTicks').querySelectorAll('span').forEach((t, j) => t.classList.toggle('on', j === i));
+  $('#speedMaps').textContent = SPEEDS[S.speed].map;
+}
+function renderTemp(){
+  const i = TEMP_ORDER.indexOf(S.temp), word = TEMPS[S.temp].ko, el = $('#temp');
+  el.value = i; el.setAttribute('aria-valuetext', word);
+  $('#tempOut').textContent = word;
+  $('#tempMaps').textContent = TEMPS[S.temp].map;
+}
+function renderSpace(){
+  [['openness', OPEN_ORDER, OPENNESS], ['density', DENS_ORDER, DENSITY]].forEach(([key, order, data]) => {
+    const i = order.indexOf(S[key]), el = $('#' + key), word = data[S[key]].ko;
+    el.value = i;
+    el.setAttribute('aria-valuetext', word);
+    $('#' + key + 'Out').textContent = word;
+    $('#' + key + 'Ticks').querySelectorAll('span').forEach((t, j) => t.classList.toggle('on', j === i));
+  });
+  $('#spaceMaps').textContent = SP().map;
+}
+function setPaused(v){
+  paused = v;
+  const b = $('#btnPause');
+  b.textContent = paused ? '애니메이션 재생' : '애니메이션 일시정지';
+  b.setAttribute('aria-pressed', String(paused));
+  wake();
+}
+
+/* ════════ 저장 ════════ */
+function download(blob, name){
+  const u = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = u; a.download = name;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(u), 2000);
+}
+function fileStem(){ return `한잔의흔적-${hashStr(recordKey()) % 900 + 100}`; }
+function savePNG(){
+  if (!S.record) return;
+  if (glOK) draw();
+  const W = glOK ? Math.min(canvas.width, canvas.height) : 900;   // 화면 중앙의 정사각형을 표본으로 저장
+  const rows = recordRows();
+  const fs = Math.max(11, Math.round(W * .019)), sfs = Math.round(W * .03), m = W * .055;
+  const ink = '#27272B', muted = '#7E7E86';
+  const mono = 'ui-monospace, "SF Mono", Menlo, Consolas, monospace';
+  const serif = '"Pretendard", "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", system-ui, sans-serif';
+  const sans = '"Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", system-ui, sans-serif';
+  const c = document.createElement('canvas');
+  c.width = W; c.height = 10;
+  let x = c.getContext('2d');
+  x.font = `${sfs}px ${serif}`;
+  const words = sentence().split(' '), lines = []; let line = '';
+  words.forEach(w => { const t = line ? line + ' ' + w : w; if (x.measureText(t).width > W - m*2 && line){ lines.push(line); line = w; } else line = t; });
+  lines.push(line);
+  c.height = Math.ceil(W + sfs * 1.6 + lines.length * sfs * 1.35 + fs * .6 + rows.length * fs * 1.7 + fs * 1.5);
+  x = c.getContext('2d');
+  x.fillStyle = '#EEEBE5'; x.fillRect(0, 0, c.width, c.height);
+  if (glOK) x.drawImage(canvas, (canvas.width - W) / 2, (canvas.height - W) / 2, W, W, 0, 0, W, W);
+  x.fillStyle = ink; x.font = `500 ${fs}px ${mono}`;
+  x.fillText(specNo(), m, m + fs);
+  x.globalAlpha = .75; x.fillRect(m, m + fs * 1.45, W * .075, Math.max(1, W * .0012)); x.globalAlpha = 1;
+  let y = W + sfs * 1.6;
+  x.font = `${sfs}px ${serif}`;
+  lines.forEach(l => { x.fillText(l, m, y); y += sfs * 1.35; });
+  y += fs * .6;
+  rows.forEach(([k, v]) => {
+    x.fillStyle = muted; x.font = `${fs}px ${sans}`; x.fillText(k, m, y);
+    x.fillStyle = ink; x.fillText(v, m + fs * 8, y);
+    y += fs * 1.7;
+  });
+  c.toBlob(b => { if (b) download(b, fileStem() + '.png'); }, 'image/png');
+}
+function saveJSON(){
+  if (!S.record) return;
+  const data = {...S.record, 문장: sentence()};
+  download(new Blob([JSON.stringify(data, null, 2)], {type:'application/json'}), fileStem() + '.json');
+}
+
+/* ════════ 시작 ════════ */
+refreshSpace();
+buildPanel();
+buildLayout();
+snapColors();
+syncInputs();
+setPhase('pre');
+initGL();
+window.addEventListener('resize', resize);
+if (window.visualViewport) window.visualViewport.addEventListener('resize', resize);
+if (window.ResizeObserver) new ResizeObserver(resize).observe(canvas);
+// 패널 숨기기 · 보기: 작품만 온전히 볼 수 있다
+$('#btnPanel').addEventListener('click', () => {
+  const hidden = document.body.classList.toggle('panel-hidden');
+  $('#btnPanel').textContent = hidden ? '패널 보기' : '패널 숨기기';
+  $('#btnPanel').setAttribute('aria-expanded', String(!hidden));
+});
+canvas.addEventListener('webglcontextlost', e => { e.preventDefault(); lost = true; glOK = false; });
+canvas.addEventListener('webglcontextrestored', () => { lost = false; initGL(); });
+const onRM = e => { reduced = e.matches; };
+if (rmq.addEventListener) rmq.addEventListener('change', onRM); else if (rmq.addListener) rmq.addListener(onRM);
+requestAnimationFrame(loop);
+})();
+</script>
+
+<!-- ▼ 버전 메뉴 (추가된 부분: 이 블록과 version-menu.js 외에는 작품 코드를 바꾸지 않았다) -->
+<style>
+/* 상단 상태 표시줄 오른쪽, 조작 패널과 겹치지 않는 자리 */
+.vmenu-btn{top:18px;right:396px}
+body.panel-hidden .vmenu-btn{right:110px}
+@media (max-width:880px){.vmenu-btn,body.panel-hidden .vmenu-btn{top:max(12px,env(safe-area-inset-top));right:14px}}
+</style>
+<script>window.COFFEE_TRACE_VERSION = 'v06';</script>
+<script src="version-menu.js"></script>
+<script>
+/* version-menu.js를 찾지 못했을 때(HTML 파일만 따로 열었을 때)도 버전 버튼이 사라지지 않도록 하는 대체 표시 */
+if (typeof VERSION_HISTORY === 'undefined') (function(){
+  const id = window.COFFEE_TRACE_VERSION || '';
+  const st = document.createElement('style');
+  st.textContent = '.vmenu-btn{position:fixed;z-index:6;display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 12px;border-radius:999px;border:1px solid rgba(255,255,255,.75);background:rgba(255,255,255,.62);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);font:500 12px/1 "Pretendard","Apple SD Gothic Neo","Noto Sans KR",system-ui,sans-serif;color:#2B3242;cursor:pointer}'
+    + '.vmenu-note{position:fixed;z-index:7;width:250px;padding:12px 14px;border-radius:14px;background:rgba(244,247,250,.96);box-shadow:0 14px 30px -14px rgba(60,85,110,.45);font:12px/1.55 "Pretendard","Apple SD Gothic Neo","Noto Sans KR",system-ui,sans-serif;color:#2B3242}';
+  document.head.appendChild(st);
+  const btn = document.createElement('button');
+  btn.type = 'button'; btn.className = 'vmenu-btn'; btn.setAttribute('aria-expanded', 'false');
+  btn.innerHTML = '버전 ' + id + ' <span aria-hidden="true" style="font-size:9px;color:#6F7A88">▾</span>';
+  const note = document.createElement('div');
+  note.className = 'vmenu-note'; note.hidden = true; note.setAttribute('role', 'status');
+  note.textContent = '버전 기록 파일(versions 폴더)을 찾지 못했습니다. coffee-trace-versions.zip의 압축을 푼 뒤, 그 폴더 안의 coffee-ring-trace.html을 열면 모든 버전을 오갈 수 있습니다.';
+  const place = () => { const r = btn.getBoundingClientRect(); note.style.top = (r.bottom + 8) + 'px'; note.style.left = Math.max(8, Math.min(r.right - 250, innerWidth - 258)) + 'px'; };
+  btn.addEventListener('click', e => { e.stopPropagation(); note.hidden = !note.hidden; btn.setAttribute('aria-expanded', String(!note.hidden)); if (!note.hidden) place(); });
+  document.addEventListener('click', () => { note.hidden = true; btn.setAttribute('aria-expanded', 'false'); });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape'){ note.hidden = true; btn.setAttribute('aria-expanded', 'false'); } });
+  document.body.appendChild(btn); document.body.appendChild(note);
+})();
+</script>
+<!-- ▲ 버전 메뉴 -->
+</body>
+</html>
