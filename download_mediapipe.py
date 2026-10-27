@@ -14,6 +14,8 @@ FILES = [
     (f'{PKG}/wasm/vision_wasm_nosimd_internal.wasm', 'wasm/vision_wasm_nosimd_internal.wasm', False),
     ('https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task',
      'pose_landmarker_lite.task', True),
+    ('https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task',
+     'hand_landmarker.task', False),
 ]
 root = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'mediapipe')
 failed = False
