@@ -2,7 +2,8 @@
    모든 버전 파일이 이 파일 하나를 함께 읽는다.
    새 버전을 만들면 VERSION_HISTORY 맨 위에 항목 하나만 추가하면 된다. */
 const VERSION_HISTORY = [
-  { id: "v28", file: "coffee-trace-v28.html", title: "모금 인식 범위 확대 · 인식 범위 선택", date: "2026-10-27", latest: true },
+  { id: "v29", file: "coffee-trace-v29.html", title: "입 근처에서 손이 가려져도 모금 유지", date: "2026-10-27", latest: true },
+  { id: "v28", file: "coffee-trace-v28.html", title: "모금 인식 범위 확대 · 인식 범위 선택", date: "2026-10-27" },
   { id: "v27", file: "coffee-trace-v27.html", title: "모금 인식 보완 (입 가림 · 컵 쥔 손 · 거리 표시)", date: "2026-10-27" },
   { id: "v26", file: "coffee-trace-v26.html", title: "모금 동작 인식 · 유기체와 커피링 크기", date: "2026-10-27" },
   { id: "v25", file: "coffee-trace-v25.html", title: "유기체와 커피링의 연속적인 전환", date: "2026-10-27" },
