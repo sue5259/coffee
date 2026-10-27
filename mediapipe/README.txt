@@ -5,6 +5,7 @@
     vision_bundle.mjs
     pose_landmarker_lite.task
     hand_landmarker.task        (손가락 인식 · 없어도 동작)
+    efficientdet_lite0.tflite   (컵 검출 보조 · 없어도 동작)
     wasm/
       vision_wasm_internal.js
       vision_wasm_internal.wasm

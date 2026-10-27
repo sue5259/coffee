@@ -16,6 +16,8 @@ FILES = [
      'pose_landmarker_lite.task', True),
     ('https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task',
      'hand_landmarker.task', False),
+    ('https://storage.googleapis.com/mediapipe-models/object_detector/efficientdet_lite0/float16/1/efficientdet_lite0.tflite',
+     'efficientdet_lite0.tflite', False),
 ]
 root = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'mediapipe')
 failed = False

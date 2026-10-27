@@ -2,7 +2,8 @@
    모든 버전 파일이 이 파일 하나를 함께 읽는다.
    새 버전을 만들면 VERSION_HISTORY 맨 위에 항목 하나만 추가하면 된다. */
 const VERSION_HISTORY = [
-  { id: "v32", file: "coffee-trace-v32.html", title: "모금 동작 인식 보정 · 손 가림 수정", date: "2026-10-27", latest: true },
+  { id: "v33", file: "coffee-trace-v33.html", title: "실제 모금 동작 인식 개선", desc: "손–입 거리뿐 아니라 접근, 입 주변 가림, 후퇴의 시간적 흐름을 판정하여 실제 컵 사용 시의 모금 인식을 개선한 버전", date: "2026-10-27", latest: true },
+  { id: "v32", file: "coffee-trace-v32.html", title: "모금 동작 인식 보정 · 손 가림 수정", date: "2026-10-27" },
   { id: "v31", file: "coffee-trace-v31.html", title: "입 주변에 잠깐 머문 뒤 내려가면 한 모금", date: "2026-10-27" },
   { id: "v30", file: "coffee-trace-v30.html", title: "손가락 인식 (손 인식 모델 추가)", date: "2026-10-27" },
   { id: "v29", file: "coffee-trace-v29.html", title: "입 근처에서 손이 가려져도 모금 유지", date: "2026-10-27" },
@@ -83,7 +84,7 @@ const VERSION_HISTORY = [
   pop.innerHTML = `<p class="vmenu-title" id="vmenuTitle">버전 기록</p>
     <ul class="vmenu-list" role="menu" aria-labelledby="vmenuTitle">${VERSION_HISTORY.map(v => `
       <li role="none"><button type="button" class="vmenu-item" role="menuitemradio" tabindex="-1"
-        aria-checked="${v.id === current.id}" data-file="${v.file}">
+        aria-checked="${v.id === current.id}" data-file="${v.file}"${v.desc ? ` title="${v.desc}"` : ''}>
         <span class="vmenu-check" aria-hidden="true">${v.id === current.id ? '✓' : ''}</span>
         <span class="vmenu-id">${v.id}</span>
         <span class="vmenu-name">${v.title}<small>${v.date}</small></span>
