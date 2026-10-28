@@ -2,7 +2,8 @@
    모든 버전 파일이 이 파일 하나를 함께 읽는다.
    새 버전을 만들면 VERSION_HISTORY 맨 위에 항목 하나만 추가하면 된다. */
 const VERSION_HISTORY = [
-  { id: "v38", file: "coffee-trace-v38.html", title: "바깥 테두리는 이전 방식으로", desc: "v37의 층 배치는 유지하고, 바깥 테두리만 이전의 옅은 외곽색 빛으로 되돌림", date: "2026-10-28", latest: true },
+  { id: "v39", file: "coffee-trace-v39.html", title: "카메라 가벼운 모드", desc: "동작 인식 모델을 한 번에 하나씩 · 필요할 때만 돌려 카메라가 켜져 있어도 유기체가 덜 버벅이게 함 (버튼으로 켜고 끔)", date: "2026-10-28", latest: true },
+  { id: "v38", file: "coffee-trace-v38.html", title: "바깥 테두리는 이전 방식으로", desc: "v37의 층 배치는 유지하고, 바깥 테두리만 이전의 옅은 외곽색 빛으로 되돌림", date: "2026-10-28" },
   { id: "v37", file: "coffee-trace-v37.html", title: "커피링 색을 층으로 조화롭게", desc: "바깥 테두리 · 띠 · 안쪽 경계 · 가운데에 맛 팔레트의 서로 다른 색을 반지름 방향의 층으로 배치하고, 각도별 색은 띠 안의 은은한 얼룩으로만 남김", date: "2026-10-28" },
   { id: "v36", file: "coffee-trace-v36.html", title: "커피링에도 맛 팔레트의 색 조합", desc: "유기체 덩어리들이 있던 방향의 맛 색이 커피링 띠로 모여, 최종 얼룩에서도 팔레트의 여러 색이 보인다", date: "2026-10-28" },
   { id: "v35", file: "coffee-trace-v35.html", title: "덩어리마다 맛의 색이 보이는 유기체", desc: "맛 팔레트의 다섯 색이 각각 덩어리로 자리 잡고 서로 오가며 섞여, 한 맛 안에서도 다채롭게 보인다", date: "2026-10-28" },
