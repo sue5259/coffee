@@ -2,7 +2,8 @@
    모든 버전 파일이 이 파일 하나를 함께 읽는다.
    새 버전을 만들면 VERSION_HISTORY 맨 위에 항목 하나만 추가하면 된다. */
 const VERSION_HISTORY = [
-  { id: "v35", file: "coffee-trace-v35.html", title: "덩어리마다 맛의 색이 보이는 유기체", desc: "맛 팔레트의 다섯 색이 각각 덩어리로 자리 잡고 서로 오가며 섞여, 한 맛 안에서도 다채롭게 보인다", date: "2026-10-28", latest: true },
+  { id: "v36", file: "coffee-trace-v36.html", title: "커피링에도 맛 팔레트의 색 조합", desc: "유기체 덩어리들이 있던 방향의 맛 색이 커피링 띠로 모여, 최종 얼룩에서도 팔레트의 여러 색이 보인다", date: "2026-10-28", latest: true },
+  { id: "v35", file: "coffee-trace-v35.html", title: "덩어리마다 맛의 색이 보이는 유기체", desc: "맛 팔레트의 다섯 색이 각각 덩어리로 자리 잡고 서로 오가며 섞여, 한 맛 안에서도 다채롭게 보인다", date: "2026-10-28" },
   { id: "v34", file: "coffee-trace-v34.html", title: "마실수록 커지는 유기체", desc: "처음에는 작게 시작해 모금이 늘수록 유기체와 최종 커피링이 커진다 (0회 0.4배 → 많이 마실수록 1.1배)", date: "2026-10-28" },
   { id: "v33", file: "coffee-trace-v33.html", title: "실제 모금 동작 인식 개선", desc: "손–입 거리뿐 아니라 접근, 입 주변 가림, 후퇴의 시간적 흐름을 판정하여 실제 컵 사용 시의 모금 인식을 개선한 버전", date: "2026-10-27" },
   { id: "v32", file: "coffee-trace-v32.html", title: "모금 동작 인식 보정 · 손 가림 수정", date: "2026-10-27" },
