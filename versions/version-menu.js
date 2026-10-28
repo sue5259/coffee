@@ -2,7 +2,8 @@
    모든 버전 파일이 이 파일 하나를 함께 읽는다.
    새 버전을 만들면 VERSION_HISTORY 맨 위에 항목 하나만 추가하면 된다. */
 const VERSION_HISTORY = [
-  { id: "v33", file: "coffee-trace-v33.html", title: "실제 모금 동작 인식 개선", desc: "손–입 거리뿐 아니라 접근, 입 주변 가림, 후퇴의 시간적 흐름을 판정하여 실제 컵 사용 시의 모금 인식을 개선한 버전", date: "2026-10-27", latest: true },
+  { id: "v34", file: "coffee-trace-v34.html", title: "마실수록 커지는 유기체", desc: "처음에는 작게 시작해 모금이 늘수록 유기체와 최종 커피링이 커진다 (0회 0.4배 → 많이 마실수록 1.1배)", date: "2026-10-28", latest: true },
+  { id: "v33", file: "coffee-trace-v33.html", title: "실제 모금 동작 인식 개선", desc: "손–입 거리뿐 아니라 접근, 입 주변 가림, 후퇴의 시간적 흐름을 판정하여 실제 컵 사용 시의 모금 인식을 개선한 버전", date: "2026-10-27" },
   { id: "v32", file: "coffee-trace-v32.html", title: "모금 동작 인식 보정 · 손 가림 수정", date: "2026-10-27" },
   { id: "v31", file: "coffee-trace-v31.html", title: "입 주변에 잠깐 머문 뒤 내려가면 한 모금", date: "2026-10-27" },
   { id: "v30", file: "coffee-trace-v30.html", title: "손가락 인식 (손 인식 모델 추가)", date: "2026-10-27" },
