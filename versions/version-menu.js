@@ -2,7 +2,8 @@
    모든 버전 파일이 이 파일 하나를 함께 읽는다.
    새 버전을 만들면 VERSION_HISTORY 맨 위에 항목 하나만 추가하면 된다. */
 const VERSION_HISTORY = [
-  { id: "v44", file: "coffee-trace-v44.html", title: "SVG 글꼴 Pretendard", desc: "SVG 안에 Pretendard 글꼴(쓰이는 글자만)을 넣어 어느 컴퓨터에서 열거나 인쇄해도 같은 글꼴로 보입니다.", date: "2026-11-02", latest: true },
+  { id: "v45", file: "coffee-trace-v45.html", title: "리소 · 펜 플로터 저장", desc: "리소용 저장: 잉크별 흑백 판(300dpi PNG)과 겹쳐 찍은 미리보기를 ZIP으로. 펜 플로터용 저장: 커피링 윤곽을 따라 겹겹이 그은 선만으로 된 mm 단위 SVG(펜별 레이어).", date: "2026-11-02", latest: true },
+  { id: "v44", file: "coffee-trace-v44.html", title: "SVG 글꼴 Pretendard", desc: "SVG 안에 Pretendard 글꼴(쓰이는 글자만)을 넣어 어느 컴퓨터에서 열거나 인쇄해도 같은 글꼴로 보입니다.", date: "2026-11-02" },
   { id: "v43", file: "coffee-trace-v43.html", title: "SVG 정사각형 레이아웃", desc: "SVG를 흰 바탕의 정사각형으로 저장합니다. 가운데에 커피링을 두고, 네 모서리에 맛 · 시간 · 모금 · 온도, 번호, 날짜, 제목만 적습니다.", date: "2026-11-02" },
   { id: "v42", file: "coffee-trace-v42.html", title: "SVG 흰 바탕", desc: "SVG로 저장할 때 바탕을 흰색으로 바꿔 인쇄하면 커피링만 또렷하게 보입니다.", date: "2026-11-02" },
   { id: "v41", file: "coffee-trace-v41.html", title: "인식 정확도 회복", desc: "몸 인식과 손가락·컵 인식을 두 작업 공간에서 동시에 처리하고, 다가오는 동작을 시간 기준으로 판단합니다. 작업 공간이 느리면 화면 쪽 직접 인식(v39 방식)을 시험해 더 빠른 쪽을 씁니다. 미리보기를 연 상태에서 D 키로 기술 정보를 볼 수 있습니다.", date: "2026-10-28" },
